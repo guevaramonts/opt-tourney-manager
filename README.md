@@ -133,3 +133,16 @@ The **Pocket Director** (OPT) application serves as a comprehensive management t
 
 ### Technical Overview
 Built with modern web technologies, the app uses **Node.js** for its runtime environment and **React** (or similar framework) for the user interface, ensuring a responsive experience for organizers on both desktop and mobile devices.
+
+## Admin Setup and Usage
+
+### Season Setup
+1. Open the Admin panel.
+2. Navigate to the **Seasons** view.
+3. Use the **Season Picker** to create or select a tournament season.
+4. Define your players and point structures in the **Players** and **Data Tasks** views.
+
+### Running a Tournament
+1. Assign players to a tournament in the **Registration** view.
+2. Manage live gameplay using the **Live Controller** and **In-Tournament Manager**.
+3. Display the tournament clock to players using the **Clock** view components.
