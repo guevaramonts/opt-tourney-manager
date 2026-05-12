@@ -1,9 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Player, UpdatePlayerData } from '@shared/types';
+import { useTournament } from '../TournamentContext';
 
 export default function PlayersView() {
+  const { activeTournament } = useTournament();
   const [players, setPlayers] = useState<Player[]>([]);
+  const [eliminatedCount, setEliminatedCount] = useState<number | null>(null);
+  const [activeSeatingByPlayerId, setActiveSeatingByPlayerId] = useState<Record<number, { tableName: string | null; seatNumber: number | null }>>({});
   const [newName, setNewName] = useState('');
+  const [newNickname, setNewNickname] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -11,6 +16,7 @@ export default function PlayersView() {
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState('');
+  const [editNickname, setEditNickname] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [editPhone, setEditPhone] = useState('');
 
@@ -23,7 +29,45 @@ export default function PlayersView() {
     }
   }, []);
 
+  const refreshEliminatedCount = useCallback(async () => {
+    if (!activeTournament) {
+      setEliminatedCount(null);
+      setActiveSeatingByPlayerId({});
+      return;
+    }
+    try {
+      const active = await window.api.getActivePlayers(activeTournament.id);
+      const total = activeTournament.player_count ?? 0;
+      setEliminatedCount(total - active.length);
+      const seating: Record<number, { tableName: string | null; seatNumber: number | null }> = {};
+      for (const entry of active) {
+        seating[entry.player_id] = {
+          tableName: entry.table_name,
+          seatNumber: entry.seat_number,
+        };
+      }
+      setActiveSeatingByPlayerId(seating);
+    } catch {
+      setEliminatedCount(null);
+      setActiveSeatingByPlayerId({});
+    }
+  }, [activeTournament]);
+
+  const showSeatNumbers = activeTournament?.status === 'pending';
+
   useEffect(() => { refresh(); }, [refresh]);
+
+  useEffect(() => {
+    refreshEliminatedCount();
+  }, [refreshEliminatedCount]);
+
+  // Refresh eliminated count when tournament is reset.
+  useEffect(() => {
+    const unsubscribe = window.api.onTournamentProgressReset(() => {
+      refreshEliminatedCount();
+    });
+    return unsubscribe;
+  }, [refreshEliminatedCount]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -33,10 +77,12 @@ export default function PlayersView() {
     try {
       await window.api.createPlayer({
         name: newName.trim(),
+        nickname: newNickname.trim() || undefined,
         email: newEmail.trim() || undefined,
         phone: newPhone.trim() || undefined,
       });
       setNewName('');
+      setNewNickname('');
       setNewEmail('');
       setNewPhone('');
       setStatus({ text: `✓ ${newName.trim()} added to roster`, ok: true });
@@ -65,6 +111,7 @@ export default function PlayersView() {
   function handleEdit(player: Player) {
     setEditingId(player.id);
     setEditName(player.name);
+    setEditNickname(player.nickname || '');
     setEditEmail(player.email || '');
     setEditPhone(player.phone || '');
   }
@@ -75,6 +122,7 @@ export default function PlayersView() {
       await window.api.updatePlayer({
         id: playerId,
         name: editName.trim() || undefined,
+        nickname: editNickname.trim() || undefined,
         email: editEmail.trim() || undefined,
         phone: editPhone.trim() || undefined,
       } as UpdatePlayerData);
@@ -89,6 +137,7 @@ export default function PlayersView() {
   function handleCancel() {
     setEditingId(null);
     setEditName('');
+    setEditNickname('');
     setEditEmail('');
     setEditPhone('');
   }
@@ -102,12 +151,19 @@ export default function PlayersView() {
 
       {/* Add player form */}
       <form onSubmit={handleCreate} className="space-y-3">
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-4 gap-3">
           <input
             type="text"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             placeholder="Full name…"
+            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
+          />
+          <input
+            type="text"
+            value={newNickname}
+            onChange={(e) => setNewNickname(e.target.value)}
+            placeholder="Nickname (optional)"
             className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
           />
           <input
@@ -147,6 +203,10 @@ export default function PlayersView() {
           <thead>
             <tr className="border-b border-gray-800 bg-gray-900 text-left">
               <th className="px-4 py-3 text-xs uppercase tracking-wider text-gray-500 font-semibold">Name</th>
+              <th className="px-4 py-3 text-xs uppercase tracking-wider text-gray-500 font-semibold">Nickname</th>
+              {showSeatNumbers && (
+                <th className="px-4 py-3 text-xs uppercase tracking-wider text-gray-500 font-semibold">Table/Seat</th>
+              )}
               <th className="px-4 py-3 text-xs uppercase tracking-wider text-gray-500 font-semibold">Email</th>
               <th className="px-4 py-3 text-xs uppercase tracking-wider text-gray-500 font-semibold">Phone</th>
               <th className="px-4 py-3 text-xs uppercase tracking-wider text-gray-500 font-semibold text-center">Tournaments</th>
@@ -157,13 +217,17 @@ export default function PlayersView() {
           <tbody className="divide-y divide-gray-800">
             {players.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-gray-600 text-sm italic">
+                <td colSpan={showSeatNumbers ? 8 : 7} className="px-4 py-8 text-center text-gray-600 text-sm italic">
                   No players yet — add someone above
                 </td>
               </tr>
             ) : (
               players.map((p) => {
                 const isEditing = editingId === p.id;
+                const seating = activeSeatingByPlayerId[p.id];
+                const seatingLabel = seating
+                  ? `${seating.tableName ?? 'Unseated'}${seating.seatNumber !== null ? ` · Seat ${seating.seatNumber}` : ''}`
+                  : '—';
                 return (
                   <tr key={p.id} className={`${isEditing ? 'bg-gray-800' : 'hover:bg-gray-900/50'} transition-colors group`}>
                     <td className="px-4 py-3">
@@ -177,6 +241,23 @@ export default function PlayersView() {
                         />
                       ) : (
                         <span className="font-medium text-gray-100">{p.name}</span>
+                      )}
+                    </td>
+                    {showSeatNumbers && (
+                      <td className="px-4 py-3 text-gray-400 text-xs">
+                        <span className="font-mono">{seatingLabel}</span>
+                      </td>
+                    )}
+                    <td className="px-4 py-3">
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={editNickname}
+                          onChange={(e) => setEditNickname(e.target.value)}
+                          className="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs w-full focus:outline-none focus:border-orange-400"
+                        />
+                      ) : (
+                        <span className="text-gray-400 text-xs">{p.nickname ?? <span className="text-gray-700">—</span>}</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
@@ -254,6 +335,17 @@ export default function PlayersView() {
               })
             )}
           </tbody>
+          {players.length > 0 && (
+            <tfoot>
+              <tr className="border-t border-gray-700 bg-gray-900">
+                <td colSpan={showSeatNumbers ? 8 : 7} className="px-4 py-2 text-center text-xs text-gray-400 tracking-widest select-none">
+                  {eliminatedCount !== null
+                    ? `── ${eliminatedCount} player${eliminatedCount === 1 ? '' : 's'} eliminated ──`
+                    : `── ${players.length} player${players.length === 1 ? '' : 's'} ──`}
+                </td>
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
 

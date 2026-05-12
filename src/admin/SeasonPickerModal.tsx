@@ -1,0 +1,108 @@
+import { useCallback, useEffect, useState } from 'react';
+import type { Season } from '@shared/types';
+
+interface Props {
+  onSelect: (season: Season) => void;
+}
+
+export default function SeasonPickerModal({ onSelect }: Props) {
+  const [seasons, setSeasons] = useState<Season[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [newName, setNewName] = useState('');
+  const [creating, setBusy] = useState(false);
+  const [status, setStatus] = useState<{ text: string; ok: boolean } | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const rows = await window.api.getAllSeasons();
+      setSeasons(rows);
+      // If there's exactly one active season, auto-select it so the user doesn't need to click.
+      if (rows.length === 1) {
+        onSelect(rows[0]);
+      }
+    } catch {
+      setStatus({ text: 'Failed to load seasons.', ok: false });
+    } finally {
+      setLoading(false);
+    }
+  }, [onSelect]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function handleCreate() {
+    if (!newName.trim()) return;
+    setBusy(true);
+    setStatus(null);
+    try {
+      const created = await window.api.createSeason(newName.trim());
+      setNewName('');
+      onSelect(created);
+    } catch (err) {
+      setStatus({ text: String(err), ok: false });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl border border-gray-700 bg-gray-900 shadow-2xl p-6 space-y-5">
+        <div>
+          <h1 className="text-lg font-bold text-gray-100">Select a Season</h1>
+          <p className="text-sm text-gray-400 mt-1">
+            All views will use this season. You can change it from the header at any time.
+          </p>
+        </div>
+
+        {loading ? (
+          <p className="text-sm text-gray-500 text-center py-4">Loading seasons…</p>
+        ) : seasons.length === 0 ? (
+          <p className="text-sm text-gray-500">No seasons yet. Create one below to get started.</p>
+        ) : (
+          <ul className="space-y-2 max-h-64 overflow-y-auto">
+            {seasons.map((season) => (
+              <li key={season.id}>
+                <button
+                  type="button"
+                  onClick={() => onSelect(season)}
+                  className="w-full text-left rounded-xl border border-gray-700 bg-gray-800 hover:border-orange-500 hover:bg-orange-950/20 px-4 py-3 transition-colors"
+                >
+                  <p className="font-semibold text-sm text-gray-100">{season.name}</p>
+                  <p className="text-xs text-gray-500 capitalize mt-0.5">{season.status}</p>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="border-t border-gray-800 pt-4 space-y-2">
+          <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold">Create New Season</p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') void handleCreate(); }}
+              placeholder="e.g. 2026 Regular Season"
+              className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
+            />
+            <button
+              type="button"
+              onClick={() => void handleCreate()}
+              disabled={creating || !newName.trim()}
+              className="rounded-lg bg-orange-500 hover:bg-orange-400 disabled:opacity-40 text-white font-semibold px-4 py-2 text-sm"
+            >
+              {creating ? '…' : 'Create'}
+            </button>
+          </div>
+          {status && (
+            <p className={`text-xs ${status.ok ? 'text-green-400' : 'text-red-400'}`}>{status.text}</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

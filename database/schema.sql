@@ -8,12 +8,34 @@ CREATE TABLE IF NOT EXISTS tournaments (
   name           TEXT    NOT NULL,
   buy_in         INTEGER NOT NULL,
   bounty_amount  INTEGER NOT NULL DEFAULT 0,
+  blind_structure_id INTEGER REFERENCES blind_structures(id),
   status         TEXT    NOT NULL DEFAULT 'pending'  -- pending | finished
+);
+
+-- Reusable blind structure templates
+CREATE TABLE IF NOT EXISTS blind_structures (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT    NOT NULL UNIQUE,
+  created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS blind_structure_levels (
+  id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+  blind_structure_id INTEGER NOT NULL REFERENCES blind_structures(id) ON DELETE CASCADE,
+  level              INTEGER NOT NULL,
+  small_blind        INTEGER NOT NULL DEFAULT 0,
+  big_blind          INTEGER NOT NULL DEFAULT 0,
+  ante               INTEGER NOT NULL DEFAULT 0,
+  duration_seconds   INTEGER NOT NULL DEFAULT 900,
+  is_break           INTEGER NOT NULL DEFAULT 0,
+  break_label        TEXT,
+  UNIQUE(blind_structure_id, level)
 );
 
 CREATE TABLE IF NOT EXISTS players (
   id                    INTEGER PRIMARY KEY AUTOINCREMENT,
   name                  TEXT    NOT NULL UNIQUE,
+  nickname              TEXT,
   total_career_earnings INTEGER NOT NULL DEFAULT 0
 );
 

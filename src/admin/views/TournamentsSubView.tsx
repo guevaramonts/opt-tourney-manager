@@ -1,0 +1,336 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { BlindStructure, CreateTournamentData, SeasonTournamentEntry, Tournament } from '@shared/types';
+import { useSeason } from '../SeasonContext';
+import { useTournament } from '../TournamentContext';
+
+interface TournamentsSubViewProps {
+  onNavigateToRegistration?: () => void;
+}
+
+export default function TournamentsSubView({ onNavigateToRegistration }: TournamentsSubViewProps) {
+  const { activeSeason } = useSeason();
+  const { setActiveTournament } = useTournament();
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [blindStructures, setBlindStructures] = useState<BlindStructure[]>([]);
+  const [tournamentForm, setTournamentForm] = useState({ name: '', buyIn: '20', bountyAmount: '5', blindStructureId: '' });
+  const [selectedTournamentId, setSelectedTournamentId] = useState('');
+  const [seasonTournaments, setSeasonTournaments] = useState<SeasonTournamentEntry[]>([]);
+  const [status, setStatus] = useState<{ text: string; ok: boolean } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const refreshAll = useCallback(async () => {
+    const [tournamentRows, structureRows] = await Promise.all([
+      window.api.getAllTournaments(),
+      window.api.getBlindStructures(),
+    ]);
+    setTournaments(tournamentRows);
+    setBlindStructures(structureRows);
+
+    if (activeSeason !== null) {
+      const linked = await window.api.getSeasonTournaments(activeSeason.id);
+      setSeasonTournaments(linked);
+    } else {
+      setSeasonTournaments([]);
+    }
+  }, [activeSeason]);
+
+  const refreshSeasonDetails = useCallback(async () => {
+    if (activeSeason === null) {
+      setSeasonTournaments([]);
+      return;
+    }
+
+    const linked = await window.api.getSeasonTournaments(activeSeason.id);
+    setSeasonTournaments(linked);
+  }, [activeSeason]);
+
+  useEffect(() => {
+    void refreshAll();
+  }, [refreshAll]);
+
+  useEffect(() => {
+    void refreshSeasonDetails();
+  }, [refreshSeasonDetails]);
+
+  const linkedTournamentIds = useMemo(
+    () => new Set(seasonTournaments.map((row) => row.tournament_id)),
+    [seasonTournaments]
+  );
+
+  const availableTournaments = useMemo(
+    () => tournaments.filter((row) => !linkedTournamentIds.has(row.id)),
+    [tournaments, linkedTournamentIds]
+  );
+
+  const pendingTournaments = useMemo(
+    () => tournaments.filter((row) => row.status === 'pending'),
+    [tournaments]
+  );
+
+  async function handleCreateTournament() {
+    if (!tournamentForm.name.trim()) {
+      setStatus({ text: 'Tournament name is required.', ok: false });
+      return;
+    }
+
+    setBusy(true);
+    setStatus(null);
+    try {
+      const payload: CreateTournamentData = {
+        name: tournamentForm.name.trim(),
+        buyIn: Number(tournamentForm.buyIn) || 0,
+        bountyAmount: Number(tournamentForm.bountyAmount) || 0,
+        blindStructureId: tournamentForm.blindStructureId ? Number(tournamentForm.blindStructureId) : null,
+      };
+      const created = await window.api.createTournament(payload);
+      setTournamentForm({ name: '', buyIn: '20', bountyAmount: '5', blindStructureId: '' });
+      setStatus({ text: `Tournament "${created.name}" created.`, ok: true });
+      await refreshAll();
+    } catch (err) {
+      setStatus({ text: String(err), ok: false });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleLinkTournament() {
+    if (activeSeason === null || !selectedTournamentId) return;
+
+    setBusy(true);
+    setStatus(null);
+    try {
+      const nextNumber = seasonTournaments.length > 0
+        ? Math.max(...seasonTournaments.map((row) => row.tournament_number)) + 1
+        : 1;
+      await window.api.addTournamentToSeason(activeSeason.id, Number(selectedTournamentId), nextNumber);
+      setSelectedTournamentId('');
+      setStatus({ text: 'Tournament linked to season.', ok: true });
+      await refreshSeasonDetails();
+    } catch (err) {
+      setStatus({ text: String(err), ok: false });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleQuickAddTournamentToSeason(tournamentId: number) {
+    if (activeSeason === null) {
+      setStatus({ text: 'Select a season first.', ok: false });
+      return;
+    }
+
+    setBusy(true);
+    setStatus(null);
+    try {
+      const nextNumber = seasonTournaments.length > 0
+        ? Math.max(...seasonTournaments.map((row) => row.tournament_number)) + 1
+        : 1;
+      await window.api.addTournamentToSeason(activeSeason.id, tournamentId, nextNumber);
+      setStatus({ text: 'Tournament added to season.', ok: true });
+      await refreshSeasonDetails();
+    } catch (err) {
+      setStatus({ text: String(err), ok: false });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleFinalizeTournament(tournamentId: number) {
+    setBusy(true);
+    setStatus(null);
+    try {
+      const result = await window.api.finalizeTournament(tournamentId);
+      setStatus({ text: `Tournament finalized. ${result.resultsCommitted} season result${result.resultsCommitted === 1 ? '' : 's'} committed.`, ok: true });
+      await refreshSeasonDetails();
+    } catch (err) {
+      setStatus({ text: String(err), ok: false });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleAddPlayersToTournament(tournamentId: number, tournamentRow: SeasonTournamentEntry) {
+    setActiveTournament({
+      id: tournamentId,
+      name: tournamentRow.tournament_name,
+      status: tournamentRow.tournament_status,
+      buy_in: 0,
+      bounty_amount: 0,
+    });
+    onNavigateToRegistration?.();
+  }
+
+  return (
+    <div className="space-y-6">
+      {!activeSeason && (
+        <div className="rounded-lg border border-yellow-800 bg-yellow-950/20 px-4 py-3 text-sm text-yellow-300">
+          No season selected. Use the <span className="font-semibold">Change</span> button in the header to pick one.
+        </div>
+      )}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
+        <section className="rounded-xl border border-gray-800 bg-gray-900/50 p-4 space-y-3">
+          <h2 className="text-lg font-semibold">Season</h2>
+          {activeSeason ? (
+            <div className="rounded-lg border border-sky-800 bg-sky-950/20 px-3 py-2">
+              <p className="text-sm font-semibold text-sky-300">{activeSeason.name}</p>
+              <p className="text-xs text-gray-500 capitalize">{activeSeason.status}</p>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500 italic">No season active</p>
+          )}
+        </section>
+
+        <section className="xl:col-span-2 rounded-xl border border-gray-800 bg-gray-900/50 p-4 space-y-3">
+          <h3 className="text-base font-semibold">Create Tournament</h3>
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+            <input
+              value={tournamentForm.name}
+              onChange={(e) => setTournamentForm((prev) => ({ ...prev, name: e.target.value }))}
+              placeholder="Tournament name"
+              className="md:col-span-2 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
+            />
+            <input
+              type="number"
+              min="0"
+              value={tournamentForm.buyIn}
+              onChange={(e) => setTournamentForm((prev) => ({ ...prev, buyIn: e.target.value }))}
+              placeholder="Buy-in"
+              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
+            />
+            <input
+              type="number"
+              min="0"
+              value={tournamentForm.bountyAmount}
+              onChange={(e) => setTournamentForm((prev) => ({ ...prev, bountyAmount: e.target.value }))}
+              placeholder="Bounty"
+              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
+            />
+            {blindStructures.length > 0 ? (
+              <select
+                value={tournamentForm.blindStructureId}
+                onChange={(e) => setTournamentForm((prev) => ({ ...prev, blindStructureId: e.target.value }))}
+                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
+              >
+                <option value="">Default blinds</option>
+                {blindStructures.map((structure) => (
+                  <option key={structure.id} value={structure.id}>{structure.name}</option>
+                ))}
+              </select>
+            ) : (
+              <div className="bg-gray-800 border border-red-700 rounded-lg px-3 py-2 text-sm text-red-400 flex items-center justify-center">
+                <span className="text-xs font-medium">Create a blind structure first</span>
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={handleCreateTournament}
+              disabled={busy || !tournamentForm.name.trim()}
+              className="rounded-lg bg-orange-500 hover:bg-orange-400 disabled:opacity-40 text-white font-semibold px-4 py-2 text-sm"
+            >
+              Create Tournament
+            </button>
+          </div>
+
+          {pendingTournaments.length > 0 && (
+            <div className="space-y-2 rounded-lg border border-gray-800 bg-gray-950/40 p-3">
+              <p className="text-xs uppercase tracking-wide text-gray-500">Pending Tournaments</p>
+              {pendingTournaments.slice(0, 8).map((row) => (
+                <div key={row.id} className="flex items-center justify-between gap-2 text-sm">
+                  <span className="text-gray-300 truncate">{row.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => { void handleQuickAddTournamentToSeason(row.id); }}
+                    disabled={busy || activeSeason === null || linkedTournamentIds.has(row.id)}
+                    className="rounded-md border border-sky-700 px-3 py-1 text-xs font-semibold text-sky-300 hover:border-sky-500 disabled:opacity-40"
+                  >
+                    {linkedTournamentIds.has(row.id) ? 'Linked' : 'Add to Season'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+
+      <section className="rounded-xl border border-gray-800 bg-gray-900/50 p-4 space-y-3">
+        <h3 className="text-base font-semibold">Season Tournaments</h3>
+
+        <div className="flex gap-2">
+          <select
+            value={selectedTournamentId}
+            onChange={(e) => setSelectedTournamentId(e.target.value)}
+            disabled={activeSeason === null}
+            className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400 disabled:opacity-40"
+          >
+            <option value="">— Link tournament —</option>
+            {availableTournaments.map((tournament) => (
+              <option key={tournament.id} value={tournament.id}>
+                {tournament.name} ({tournament.status})
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={handleLinkTournament}
+            disabled={busy || activeSeason === null || !selectedTournamentId}
+            className="rounded-lg border border-gray-700 px-4 py-2 text-sm font-semibold text-gray-200 hover:border-orange-500 hover:text-orange-300 disabled:opacity-40"
+          >
+            Add
+          </button>
+        </div>
+
+        <div className="space-y-2">
+          {seasonTournaments.length === 0 ? (
+            <p className="text-sm text-gray-500">No tournaments linked yet.</p>
+          ) : (
+            seasonTournaments.map((row) => (
+              <div key={row.tournament_id} className="rounded-lg border border-gray-800 bg-gray-950/50 p-3 space-y-2">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-200">#{row.tournament_number} {row.tournament_name}</p>
+                    <p className="text-xs text-gray-500">
+                      {row.player_count} entrants · {row.synced_results_count} committed
+                      {row.tournament_status === 'finalized' ? ' · ✓ Finalized' : ` · ${row.tournament_status}`}
+                    </p>
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    {row.tournament_status !== 'finalized' && (
+                      <button
+                        type="button"
+                        onClick={() => { void handleAddPlayersToTournament(row.tournament_id, row); }}
+                        disabled={busy}
+                        className="rounded-md border border-blue-700 px-3 py-1.5 text-xs font-semibold text-blue-300 hover:border-blue-500 disabled:opacity-40"
+                      >
+                        Add Players
+                      </button>
+                    )}
+                    {row.tournament_status === 'finalized' ? (
+                      <span className="rounded-md border border-green-800 px-3 py-1.5 text-xs font-semibold text-green-500 opacity-70 cursor-default select-none">
+                        Finalized
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => { void handleFinalizeTournament(row.tournament_id); }}
+                        disabled={busy || row.player_count === 0}
+                        className="rounded-md border border-orange-700 px-3 py-1.5 text-xs font-semibold text-orange-300 hover:border-orange-500 disabled:opacity-40"
+                      >
+                        Finalize &amp; Commit
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+
+      {status && (
+        <p className={`text-sm ${status.ok ? 'text-green-400' : 'text-red-400'}`}>{status.text}</p>
+      )}
+    </div>
+  );
+}

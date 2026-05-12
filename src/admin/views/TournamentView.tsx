@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { Tournament, CreateTournamentData, UpdateTournamentData } from '@shared/types';
+import type { Tournament, CreateTournamentData, UpdateTournamentData, BlindStructure } from '@shared/types';
 import { useTournament } from '../TournamentContext';
+
+interface TournamentViewProps {
+  onAddPlayers: (tournament: Tournament) => void;
+}
 
 const STATUS_LABEL: Record<string, string> = {
   pending: 'Pending',
@@ -12,20 +16,26 @@ const STATUS_COLOR: Record<string, string> = {
   finished: 'text-gray-500 bg-gray-800/30 border-gray-700',
 };
 
-export default function TournamentView() {
+export default function TournamentView({ onAddPlayers }: TournamentViewProps) {
   const { activeTournament, setActiveTournament } = useTournament();
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
-  const [form, setForm] = useState({ name: '', buyIn: '20', bountyAmount: '5' });
+  const [blindStructures, setBlindStructures] = useState<BlindStructure[]>([]);
+  const [form, setForm] = useState({ name: '', buyIn: '20', bountyAmount: '5', blindStructureId: '' });
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [finishing, setFinishing] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editForm, setEditForm] = useState({ name: '', buyIn: '0', bountyAmount: '0' });
+  const [editForm, setEditForm] = useState({ name: '', buyIn: '0', bountyAmount: '0', blindStructureId: '' });
   const [status, setStatus] = useState<{ text: string; ok: boolean } | null>(null);
 
   const refresh = useCallback(async () => {
-    const list = await window.api.getAllTournaments();
+    const [list, structures] = await Promise.all([
+      window.api.getAllTournaments(),
+      window.api.getBlindStructures(),
+    ]);
     setTournaments(list);
+    setBlindStructures(structures);
     // Keep context tournament reference fresh if one is already selected elsewhere.
     if (activeTournament) {
       const refreshed = list.find((t) => t.id === activeTournament.id) ?? null;
@@ -45,9 +55,10 @@ export default function TournamentView() {
         name: form.name.trim(),
         buyIn: Number(form.buyIn) || 0,
         bountyAmount: Number(form.bountyAmount) || 0,
+        blindStructureId: form.blindStructureId ? Number(form.blindStructureId) : null,
       };
       const created = await window.api.createTournament(data);
-      setForm({ name: '', buyIn: '20', bountyAmount: '5' });
+      setForm({ name: '', buyIn: '20', bountyAmount: '5', blindStructureId: '' });
       setStatus({ text: `✓ Tournament "${created.name}" created`, ok: true });
       await refresh();
     } catch (err) {
@@ -63,6 +74,7 @@ export default function TournamentView() {
       name: t.name,
       buyIn: String(t.buy_in),
       bountyAmount: String(t.bounty_amount),
+      blindStructureId: t.blind_structure_id ? String(t.blind_structure_id) : '',
     });
     setStatus(null);
   }
@@ -81,6 +93,7 @@ export default function TournamentView() {
         name: editForm.name.trim(),
         buyIn: Number(editForm.buyIn) || 0,
         bountyAmount: Number(editForm.bountyAmount) || 0,
+        blindStructureId: editForm.blindStructureId ? Number(editForm.blindStructureId) : null,
       };
       const updated = await window.api.updateTournament(payload);
       setStatus({ text: `✓ Tournament "${updated.name}" updated`, ok: true });
@@ -108,6 +121,31 @@ export default function TournamentView() {
     }
   }
 
+  async function handleDelete(t: Tournament) {
+    if (t.status === 'finished') return;
+    if (!confirm(`Delete "${t.name}" and all associated tournament data (registrations, bounties, and season points)?`)) return;
+
+    setDeletingId(t.id);
+    setStatus(null);
+    try {
+      const result = await window.api.deleteTournament(t.id);
+      if (activeTournament?.id === t.id) setActiveTournament(null);
+      setStatus({
+        text: `✓ Deleted "${result.name}" (removed ${result.deleted.deletedBounties} bounty events and ${result.deleted.deletedSeasonResults} season point records)`,
+        ok: true,
+      });
+      await refresh();
+    } catch (err) {
+      const message = String(err);
+      const normalized = message.includes("No handler registered for 'tournament:delete'")
+        ? 'Delete action is unavailable in the currently running app process. Restart the app and try again.'
+        : message;
+      setStatus({ text: normalized, ok: false });
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   return (
     <div className="max-w-2xl space-y-8">
       <h2 className="text-lg font-semibold">Tournaments</h2>
@@ -115,7 +153,7 @@ export default function TournamentView() {
       {/* Create form */}
       <form onSubmit={handleCreate} className="space-y-4 bg-gray-900 border border-gray-800 rounded-xl p-5">
         <h3 className="text-sm font-semibold text-gray-300">Create New Tournament</h3>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-5 gap-3">
           <div className="col-span-3">
             <label className="block text-xs text-gray-500 mb-1">Tournament Name</label>
             <input
@@ -145,6 +183,19 @@ export default function TournamentView() {
               onChange={(e) => setForm((f) => ({ ...f, bountyAmount: e.target.value }))}
               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
             />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Blind Structure</label>
+            <select
+              value={form.blindStructureId}
+              onChange={(e) => setForm((f) => ({ ...f, blindStructureId: e.target.value }))}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
+            >
+              <option value="">Default</option>
+              {blindStructures.map((structure) => (
+                <option key={structure.id} value={structure.id}>{structure.name}</option>
+              ))}
+            </select>
           </div>
           <div className="flex items-end">
             <button
@@ -204,6 +255,16 @@ export default function TournamentView() {
                         onChange={(e) => setEditForm((prev) => ({ ...prev, bountyAmount: e.target.value }))}
                         className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
                       />
+                      <select
+                        value={editForm.blindStructureId}
+                        onChange={(e) => setEditForm((prev) => ({ ...prev, blindStructureId: e.target.value }))}
+                        className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
+                      >
+                        <option value="">Default</option>
+                        {blindStructures.map((structure) => (
+                          <option key={structure.id} value={structure.id}>{structure.name}</option>
+                        ))}
+                      </select>
                       <div className="flex items-center text-xs text-gray-500">{t.player_count ?? 0} players</div>
                     </div>
                   ) : (
@@ -218,6 +279,7 @@ export default function TournamentView() {
                       </div>
                       <div className="flex items-center gap-3 text-xs text-gray-500">
                         <span className="font-mono">${t.buy_in} buy-in · ${t.bounty_amount} bounty</span>
+                        <span>{t.blind_structure_name ?? 'Default'} blinds</span>
                         <span>{t.player_count ?? 0} players</span>
                       </div>
                     </>
@@ -246,21 +308,39 @@ export default function TournamentView() {
                   </div>
                 ) : (
                   <div className="flex items-center gap-2 shrink-0">
+                    {t.status === 'pending' && (
+                      <button
+                        onClick={() => onAddPlayers(t)}
+                        disabled={deletingId === t.id || finishing}
+                        className="text-xs text-sky-300 hover:text-sky-200 font-semibold px-3 py-1.5 rounded-lg border border-sky-800 hover:border-sky-600 transition-colors disabled:opacity-40"
+                      >
+                        Add Players
+                      </button>
+                    )}
                     <button
                       onClick={() => startEdit(t)}
-                      disabled={t.status === 'finished'}
+                      disabled={t.status === 'finished' || deletingId === t.id}
                       className="text-xs text-orange-400 hover:text-orange-300 font-semibold px-3 py-1.5 rounded-lg border border-orange-800 hover:border-orange-600 transition-colors disabled:opacity-40"
                     >
                       Edit
                     </button>
-                    {t.status !== 'finished' && (
-                      <button
-                        onClick={() => handleFinish(t)}
-                        disabled={finishing}
-                        className="text-xs text-gray-500 hover:text-red-400 font-semibold px-3 py-1.5 rounded-lg border border-gray-700 hover:border-red-800 transition-colors disabled:opacity-40"
-                      >
-                        Finish
-                      </button>
+                    {t.status === 'pending' && (
+                      <>
+                        <button
+                          onClick={() => handleFinish(t)}
+                          disabled={finishing || deletingId === t.id}
+                          className="text-xs text-gray-500 hover:text-red-400 font-semibold px-3 py-1.5 rounded-lg border border-gray-700 hover:border-red-800 transition-colors disabled:opacity-40"
+                        >
+                          Finish
+                        </button>
+                        <button
+                          onClick={() => handleDelete(t)}
+                          disabled={deletingId !== null || finishing}
+                          className="text-xs text-red-400 hover:text-red-300 font-semibold px-3 py-1.5 rounded-lg border border-red-800 hover:border-red-600 transition-colors disabled:opacity-40"
+                        >
+                          {deletingId === t.id ? 'Deleting…' : 'Delete'}
+                        </button>
+                      </>
                     )}
                   </div>
                 )}

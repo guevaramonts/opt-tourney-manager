@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import type { SeatChartEntry } from '@shared/types';
 
 const TABLE_STYLE: Record<string, { icon: string; color: string; border: string; bg: string }> = {
@@ -15,6 +15,7 @@ const SCROLL_SPEED = 40;
 
 interface Props {
   entries: SeatChartEntry[];
+  showSeatNumbers?: boolean;
 }
 
 function buildRows(entries: SeatChartEntry[]) {
@@ -29,7 +30,17 @@ function buildRows(entries: SeatChartEntry[]) {
   return TABLE_ORDER.filter((t) => groups[t]).map((t) => ({ name: t, seats: groups[t] }));
 }
 
-function TableGroup({ name, seats }: { name: string; seats: SeatChartEntry[] }) {
+function TableGroup({
+  name,
+  seats,
+  keyPrefix,
+  showSeatNumbers,
+}: {
+  name: string;
+  seats: SeatChartEntry[];
+  keyPrefix: string;
+  showSeatNumbers: boolean;
+}) {
   const style = TABLE_STYLE[name] ?? { icon: '•', color: 'text-gray-400', border: 'border-gray-700', bg: 'bg-gray-800/30' };
   return (
     <div className={`rounded-lg border ${style.border} ${style.bg} overflow-hidden mb-3`}>
@@ -40,10 +51,12 @@ function TableGroup({ name, seats }: { name: string; seats: SeatChartEntry[] }) 
       </div>
       <ul className="divide-y divide-white/5">
         {seats.map((e) => (
-          <li key={e.player_name} className="flex items-center gap-2 px-3 py-1.5">
-            <span className={`${style.color} font-mono text-xs w-5 shrink-0 text-center opacity-70`}>
-              {e.seat_number ?? '—'}
-            </span>
+          <li key={`${keyPrefix}-${name}-${e.player_name}-${e.seat_number ?? 'na'}`} className="flex items-center gap-2 px-3 py-1.5">
+            {showSeatNumbers && (
+              <span className={`${style.color} font-mono text-xs w-5 shrink-0 text-center opacity-70`}>
+                {e.seat_number ?? '—'}
+              </span>
+            )}
             <span className="text-gray-200 text-sm">{e.player_name}</span>
           </li>
         ))}
@@ -52,24 +65,43 @@ function TableGroup({ name, seats }: { name: string; seats: SeatChartEntry[] }) 
   );
 }
 
-export default function SeatingChart({ entries }: Props) {
+export default function SeatingChart({ entries, showSeatNumbers = true }: Props) {
+  const viewportRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const animRef = useRef<Animation | null>(null);
+  const [shouldScroll, setShouldScroll] = useState(false);
 
   const tables = buildRows(entries);
 
   useEffect(() => {
+    const viewport = viewportRef.current;
+    const content = contentRef.current;
+    if (!viewport || !content || tables.length === 0) {
+      setShouldScroll(false);
+      return;
+    }
+
+    setShouldScroll(content.scrollHeight > viewport.clientHeight + 1);
+  }, [entries, tables.length]);
+
+  useEffect(() => {
     const track = trackRef.current;
-    if (!track || tables.length === 0) return;
+    const content = contentRef.current;
+    if (!track || !content || tables.length === 0 || !shouldScroll) {
+      animRef.current?.cancel();
+      if (track) track.style.transform = 'translateY(0)';
+      return;
+    }
 
     // Wait a tick so the DOM has rendered and we can measure height
     const raf = requestAnimationFrame(() => {
-      const halfHeight = track.scrollHeight / 2;
-      const duration = (halfHeight / SCROLL_SPEED) * 1000;
+      const loopHeight = content.scrollHeight;
+      const duration = (loopHeight / SCROLL_SPEED) * 1000;
 
       animRef.current?.cancel();
       animRef.current = track.animate(
-        [{ transform: 'translateY(0)' }, { transform: `translateY(-${halfHeight}px)` }],
+        [{ transform: 'translateY(0)' }, { transform: `translateY(-${loopHeight}px)` }],
         { duration, iterations: Infinity, easing: 'linear' }
       );
     });
@@ -78,13 +110,21 @@ export default function SeatingChart({ entries }: Props) {
       cancelAnimationFrame(raf);
       animRef.current?.cancel();
     };
-  }, [entries, tables.length]);
+  }, [entries, tables.length, shouldScroll]);
 
   if (tables.length === 0) return null;
 
-  const content = (
+  const content = (prefix: string) => (
     <>
-      {tables.map((t) => <TableGroup key={t.name} name={t.name} seats={t.seats} />)}
+      {tables.map((t) => (
+        <TableGroup
+          key={`${prefix}-${t.name}`}
+          keyPrefix={prefix}
+          name={t.name}
+          seats={t.seats}
+          showSeatNumbers={showSeatNumbers}
+        />
+      ))}
     </>
   );
 
@@ -94,11 +134,11 @@ export default function SeatingChart({ entries }: Props) {
         Seating Chart
       </h2>
       {/* Clipping window */}
-      <div className="flex-1 overflow-hidden relative">
+      <div ref={viewportRef} className="flex-1 overflow-hidden relative">
         {/* Scrolling track — content duplicated for seamless loop */}
         <div ref={trackRef} className="will-change-transform">
-          {content}
-          {content}
+          <div ref={contentRef}>{content('main')}</div>
+          {shouldScroll ? <div aria-hidden="true">{content('dup')}</div> : null}
         </div>
       </div>
     </div>

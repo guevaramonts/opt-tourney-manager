@@ -10,11 +10,15 @@ export default function LiveController() {
     smallBlind: 25,
     bigBlind: 50,
     ante: 0,
+    isBreak: false,
+    breakLabel: null,
     remainingSeconds: 900,
     running: false,
     nextSmallBlind: 50,
     nextBigBlind: 100,
     nextAnte: 0,
+    nextIsBreak: false,
+    nextBreakLabel: null,
   });
 
   // Subscribe to clock ticks pushed from the main process
@@ -52,7 +56,7 @@ export default function LiveController() {
 
     const result = await window.api.resetTournamentProgress(activeTournament.id);
     setStatus(
-      `Tournament reset: ${result.clearedBountyEvents} bounty events cleared, ${result.restoredPlayers} registrations restored.`
+      `Tournament reset: ${result.clearedSeasonResults} season point rows cleared, ${result.clearedBountyEvents} bounty events cleared, ${result.restoredPlayers} registrations restored, and $${result.rolledBackCareerEarnings.toLocaleString()} in bounty earnings rolled back.`
     );
     setActiveTournament({ ...activeTournament, status: 'pending' });
   }
@@ -75,7 +79,13 @@ export default function LiveController() {
           {minutes}:{seconds}
         </p>
         <p className="mt-2 text-sm text-gray-400">
-          Blinds: <strong className="text-white">{clockState.smallBlind} / {clockState.bigBlind}</strong>
+          {clockState.isBreak
+            ? (
+              <strong className="text-sky-300">{clockState.breakLabel || 'Break'}</strong>
+            )
+            : (
+              <>Blinds: <strong className="text-white">{clockState.smallBlind} / {clockState.bigBlind}</strong></>
+            )}
         </p>
       </div>
 

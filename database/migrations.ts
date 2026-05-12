@@ -26,12 +26,33 @@ export function runMigrations(db: Database.Database): void {
       name           TEXT    NOT NULL,
       buy_in         INTEGER NOT NULL,
       bounty_amount  INTEGER NOT NULL DEFAULT 0,
+      blind_structure_id INTEGER REFERENCES blind_structures(id),
       status         TEXT    NOT NULL DEFAULT 'pending'
+    );
+
+    CREATE TABLE IF NOT EXISTS blind_structures (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      name        TEXT    NOT NULL UNIQUE,
+      created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS blind_structure_levels (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      blind_structure_id INTEGER NOT NULL REFERENCES blind_structures(id) ON DELETE CASCADE,
+      level             INTEGER NOT NULL,
+      small_blind       INTEGER NOT NULL DEFAULT 0,
+      big_blind         INTEGER NOT NULL DEFAULT 0,
+      ante              INTEGER NOT NULL DEFAULT 0,
+      duration_seconds  INTEGER NOT NULL DEFAULT 900,
+      is_break          INTEGER NOT NULL DEFAULT 0,
+      break_label       TEXT,
+      UNIQUE(blind_structure_id, level)
     );
 
     CREATE TABLE IF NOT EXISTS players (
       id                    INTEGER PRIMARY KEY AUTOINCREMENT,
       name                  TEXT    NOT NULL UNIQUE,
+      nickname              TEXT,
       total_career_earnings INTEGER NOT NULL DEFAULT 0
     );
 
@@ -179,6 +200,42 @@ function ensureSeedData(db: Database.Database): void {
   if (!hasPhone) {
     db.exec('ALTER TABLE players ADD COLUMN phone TEXT');
   }
+  const hasNickname = db
+    .prepare("SELECT 1 FROM pragma_table_info('players') WHERE name = 'nickname'")
+    .get();
+  if (!hasNickname) {
+    db.exec('ALTER TABLE players ADD COLUMN nickname TEXT');
+  }
+
+  const hasTournamentBlindStructure = db
+    .prepare("SELECT 1 FROM pragma_table_info('tournaments') WHERE name = 'blind_structure_id'")
+    .get();
+  if (!hasTournamentBlindStructure) {
+    db.exec('ALTER TABLE tournaments ADD COLUMN blind_structure_id INTEGER REFERENCES blind_structures(id)');
+  }
+
+  db.exec(
+    `CREATE TABLE IF NOT EXISTS blind_structures (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      name        TEXT    NOT NULL UNIQUE,
+      created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+    )`
+  );
+
+  db.exec(
+    `CREATE TABLE IF NOT EXISTS blind_structure_levels (
+      id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+      blind_structure_id INTEGER NOT NULL REFERENCES blind_structures(id) ON DELETE CASCADE,
+      level              INTEGER NOT NULL,
+      small_blind        INTEGER NOT NULL DEFAULT 0,
+      big_blind          INTEGER NOT NULL DEFAULT 0,
+      ante               INTEGER NOT NULL DEFAULT 0,
+      duration_seconds   INTEGER NOT NULL DEFAULT 900,
+      is_break           INTEGER NOT NULL DEFAULT 0,
+      break_label        TEXT,
+      UNIQUE(blind_structure_id, level)
+    )`
+  );
 
   // Ensure table_state exists on older DBs
   db.exec(
@@ -191,10 +248,56 @@ function ensureSeedData(db: Database.Database): void {
   );
 
   seedDefaultStructureIfNeeded(db);
+  seedReusableBlindStructureLibraryIfNeeded(db);
   seedDummyPlayersIfNeeded(db);
   seedScoringMatrixIfNeeded(db);
   seedExactOptScoringPointsIfNeeded(db);
   normalizeTournamentStatusesIfNeeded(db);
+}
+
+function seedReusableBlindStructureLibraryIfNeeded(db: Database.Database): void {
+  const exists = db
+    .prepare("SELECT 1 FROM migrations WHERE name = 'seed_blind_structures_v1'")
+    .get();
+
+  if (exists) return;
+
+  db.transaction(() => {
+    const insertStructure = db.prepare(
+      `INSERT OR IGNORE INTO blind_structures (name)
+       VALUES (?)`
+    );
+    insertStructure.run('OPT Default');
+
+    const structure = db
+      .prepare('SELECT id FROM blind_structures WHERE name = ?')
+      .get('OPT Default') as { id: number } | undefined;
+
+    if (!structure) throw new Error('Failed to seed default blind structure');
+
+    const insertLevel = db.prepare(
+      `INSERT OR REPLACE INTO blind_structure_levels
+         (blind_structure_id, level, small_blind, big_blind, ante, duration_seconds, is_break, break_label)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+
+    for (const row of DEFAULT_STRUCTURE) {
+      insertLevel.run(
+        structure.id,
+        row.level,
+        row.small,
+        row.big,
+        row.ante,
+        row.duration * 60,
+        0,
+        null
+      );
+    }
+
+    db.prepare('UPDATE tournaments SET blind_structure_id = ? WHERE id != 0 AND blind_structure_id IS NULL').run(structure.id);
+
+    db.prepare("INSERT INTO migrations (name) VALUES ('seed_blind_structures_v1')").run();
+  })();
 }
 
 /**

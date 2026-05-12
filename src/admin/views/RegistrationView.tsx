@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { RegisterPlayerData, TableAssignment, Player, ActivePlayer } from '@shared/types';
+import type { RegisterPlayerData, TableAssignment, Player, ActivePlayer, Tournament } from '@shared/types';
 import { useTournament } from '../TournamentContext';
 
 const TABLE_STYLE: Record<string, { icon: string; color: string; border: string; bg: string }> = {
@@ -11,9 +11,10 @@ const TABLE_STYLE: Record<string, { icon: string; color: string; border: string;
 
 export default function RegistrationView() {
   const { activeTournament } = useTournament();
-  const tournamentId = activeTournament?.id ?? null;
 
   const [roster, setRoster] = useState<Player[]>([]);
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [selectedTournamentId, setSelectedTournamentId] = useState<number | null>(null);
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [status, setStatus] = useState<{ text: string; ok: boolean } | null>(null);
@@ -22,9 +23,35 @@ export default function RegistrationView() {
   const [players, setPlayers] = useState<ActivePlayer[]>([]);
   const [assignments, setAssignments] = useState<TableAssignment[]>([]);
   const [view, setView] = useState<'list' | 'tables'>('list');
+  const [removing, setRemoving] = useState(false);
+
+  const tournamentId = selectedTournamentId ?? activeTournament?.id ?? null;
+  const selectedTournament = tournaments.find((t) => t.id === tournamentId) ?? activeTournament ?? null;
+  const showSeatNumbers = selectedTournament?.status === 'pending';
+
+  const refreshTournaments = useCallback(async () => {
+    try {
+      const allTournaments = await window.api.getAllTournaments();
+      const registerable = allTournaments.filter((t) => t.status === 'pending');
+      setTournaments(registerable);
+    } catch {
+      // ignore refresh failures
+    }
+  }, []);
 
   const refreshPlayers = useCallback(async () => {
-    if (!tournamentId) return;
+    if (!tournamentId) {
+      setPlayers([]);
+      setAssignments([]);
+      try {
+        const allPlayers = await window.api.getAllPlayers();
+        setRoster(allPlayers);
+      } catch {
+        // ignore refresh failures
+      }
+      return;
+    }
+
     try {
       const [active, tables, all] = await Promise.all([
         window.api.getActivePlayers(tournamentId),
@@ -41,7 +68,25 @@ export default function RegistrationView() {
   }, [tournamentId]);
 
   useEffect(() => {
+    void refreshTournaments();
+  }, [refreshTournaments]);
+
+  useEffect(() => {
+    if (selectedTournamentId === null && activeTournament?.status === 'pending') {
+      setSelectedTournamentId(activeTournament.id);
+    }
+  }, [activeTournament, selectedTournamentId]);
+
+  useEffect(() => {
     refreshPlayers();
+  }, [refreshPlayers]);
+
+  // Refresh player data when tournament is reset.
+  useEffect(() => {
+    const unsubscribe = window.api.onTournamentProgressReset(() => {
+      refreshPlayers();
+    });
+    return unsubscribe;
   }, [refreshPlayers]);
 
   async function registerPlayers(playerList: Player[]) {
@@ -96,6 +141,21 @@ export default function RegistrationView() {
     }
   }
 
+  async function handleRemovePlayer(playerId: number, playerName: string) {
+    if (!tournamentId || !confirm(`Remove ${playerName} from this tournament?`)) return;
+    setRemoving(true);
+    setStatus(null);
+    try {
+      await window.api.unregisterPlayer({ tournamentId, playerId });
+      setStatus({ text: `\u2713 ${playerName} removed from tournament`, ok: true });
+      await refreshPlayers();
+    } catch (err) {
+      setStatus({ text: `Error: ${String(err)}`, ok: false });
+    } finally {
+      setRemoving(false);
+    }
+  }
+
   const tableGroups = assignments.reduce<Record<string, TableAssignment[]>>((acc, row) => {
     const key = row.table_name ?? '';
     if (!acc[key]) acc[key] = [];
@@ -132,32 +192,47 @@ export default function RegistrationView() {
     <div className="max-w-2xl space-y-6">
       <div className="space-y-3">
         <h2 className="text-lg font-semibold">Player Registration</h2>
-        {activeTournament ? (
+        <div className="space-y-2">
+          <label className="block text-xs text-gray-500">Tournament</label>
+          <select
+            value={tournamentId ?? ''}
+            onChange={(e) => setSelectedTournamentId(e.target.value ? Number(e.target.value) : null)}
+            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
+          >
+            <option value="">- Select pending tournament -</option>
+            {tournaments.map((tournament) => (
+              <option key={tournament.id} value={tournament.id}>
+                {tournament.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        {selectedTournament ? (
           <div className="rounded-2xl border border-orange-700 bg-orange-950/25 px-4 py-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-orange-300">
               Setting Up Tournament
             </p>
             <p className="mt-1 text-base font-semibold text-orange-100">
-              {activeTournament.name}
+              {selectedTournament.name}
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
               <span className="rounded-full border border-orange-800 bg-orange-900/40 px-2.5 py-1 text-orange-200">
-                Status: {activeTournament.status}
+                Status: {selectedTournament.status}
               </span>
               <span className="rounded-full border border-orange-800 bg-orange-900/40 px-2.5 py-1 text-orange-200">
-                Buy-in: ${activeTournament.buy_in}
+                Buy-in: ${selectedTournament.buy_in}
               </span>
               <span className="rounded-full border border-orange-800 bg-orange-900/40 px-2.5 py-1 text-orange-200">
-                Bounty: ${activeTournament.bounty_amount}
+                Bounty: ${selectedTournament.bounty_amount}
               </span>
             </div>
           </div>
         ) : null}
       </div>
 
-      {!activeTournament && (
+      {!selectedTournament && (
         <div className="rounded-xl border border-yellow-800 bg-yellow-950/20 px-4 py-3 text-sm text-yellow-400">
-          No tournament selected — go to the <strong>Tournaments</strong> tab to create or select one.
+          No tournament selected. Select a pending tournament above to bulk register players.
         </div>
       )}
 
@@ -343,10 +418,20 @@ export default function RegistrationView() {
                     {style && (
                       <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${style.color} ${style.border} ${style.bg}`}>
                         {style.icon} {p.table_name}
-                        {p.seat_number !== null ? ` \u00b7 Seat ${p.seat_number}` : ''}
+                        {showSeatNumbers && p.seat_number !== null ? ` \u00b7 Seat ${p.seat_number}` : ''}
                       </span>
                     )}
                   </div>
+                  {selectedTournament?.status !== 'finalized' && (
+                    <button
+                      type="button"
+                      onClick={() => { void handleRemovePlayer(p.player_id, p.name); }}
+                      disabled={removing}
+                      className="rounded-md border border-red-700 px-3 py-1.5 text-xs font-semibold text-red-300 hover:border-red-500 disabled:opacity-40"
+                    >
+                      Remove
+                    </button>
+                  )}
                 </li>
               );
             })
@@ -368,11 +453,30 @@ export default function RegistrationView() {
                 </div>
                 <ol className="space-y-1.5">
                   {seated.map((row) => (
-                    <li key={row.id} className="flex items-center gap-3">
-                      <span className={`text-xs font-bold font-mono ${style.color} w-6 shrink-0`}>
-                        {row.seat_number ?? '\u2014'}
-                      </span>
-                      <span className="text-sm text-gray-200">{row.player_name}</span>
+                    <li key={row.id} className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        {showSeatNumbers && (
+                          <span className={`text-xs font-bold font-mono ${style.color} w-6 shrink-0`}>
+                            {row.seat_number ?? '\u2014'}
+                          </span>
+                        )}
+                        <span className="text-sm text-gray-200">{row.player_name}</span>
+                      </div>
+                      {selectedTournament?.status !== 'finalized' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const playerObj = players.find((p) => p.name === row.player_name);
+                            if (playerObj) {
+                              void handleRemovePlayer(playerObj.player_id, playerObj.name);
+                            }
+                          }}
+                          disabled={removing}
+                          className="rounded-md border border-red-700 px-2 py-0.5 text-xs font-semibold text-red-300 hover:border-red-500 disabled:opacity-40 whitespace-nowrap"
+                        >
+                          Remove
+                        </button>
+                      )}
                     </li>
                   ))}
                   {seated.length === 0 && (

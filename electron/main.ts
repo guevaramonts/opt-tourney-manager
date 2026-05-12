@@ -90,6 +90,9 @@ app.whenReady().then(() => {
 
   createAdminWindow();
   createClockWindow();
+
+  // Ensure admin window has focus regardless of creation order.
+  adminWindow?.focus();
 });
 
 app.on('window-all-closed', () => {

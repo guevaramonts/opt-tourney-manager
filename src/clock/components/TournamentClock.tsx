@@ -30,13 +30,21 @@ export default function TournamentClock({ clock }: Props) {
 
       {/* Blinds */}
       <div className="mt-8 flex items-center justify-center gap-6">
-        <Chip label="Small" value={clock.smallBlind} />
-        <span className="text-gray-600 text-3xl">/</span>
-        <Chip label="Big" value={clock.bigBlind} />
-        {clock.ante > 0 && (
+        {clock.isBreak ? (
+          <p className="text-6xl font-bold text-sky-300 tracking-wide">
+            {clock.breakLabel || 'BREAK'}
+          </p>
+        ) : (
           <>
-            <span className="text-gray-600 text-3xl">·</span>
-            <Chip label="Ante" value={clock.ante} />
+            <Chip label="Small" value={clock.smallBlind} />
+            <span className="text-gray-600 text-3xl">/</span>
+            <Chip label="Big" value={clock.bigBlind} />
+            {clock.ante > 0 && (
+              <>
+                <span className="text-gray-600 text-3xl">·</span>
+                <Chip label="Ante" value={clock.ante} />
+              </>
+            )}
           </>
         )}
       </div>
@@ -45,12 +53,16 @@ export default function TournamentClock({ clock }: Props) {
       {clock.nextSmallBlind !== null && (
         <div className="mt-6 flex items-center justify-center gap-4">
           <span className="text-xs uppercase tracking-widest text-gray-600">Next:</span>
-          <span className="text-gray-500 text-lg font-mono">
-            {clock.nextSmallBlind.toLocaleString()}
-            <span className="text-gray-700 mx-1">/</span>
-            {clock.nextBigBlind!.toLocaleString()}
-            {clock.nextAnte ? <span className="text-gray-700"> · {clock.nextAnte.toLocaleString()} ante</span> : null}
-          </span>
+          {clock.nextIsBreak ? (
+            <span className="text-sky-300 text-lg font-semibold">{clock.nextBreakLabel || 'BREAK'}</span>
+          ) : (
+            <span className="text-gray-500 text-lg font-mono">
+              {clock.nextSmallBlind.toLocaleString()}
+              <span className="text-gray-700 mx-1">/</span>
+              {clock.nextBigBlind!.toLocaleString()}
+              {clock.nextAnte ? <span className="text-gray-700"> · {clock.nextAnte.toLocaleString()} ante</span> : null}
+            </span>
+          )}
         </div>
       )}
 
@@ -67,8 +79,8 @@ export default function TournamentClock({ clock }: Props) {
 function Chip({ label, value }: { label: string; value: number }) {
   return (
     <div className="text-center">
-      <p className="text-xs uppercase tracking-widest text-gray-500 mb-1">{label}</p>
-      <p className="text-4xl font-bold text-orange-300">
+      <p className="text-sm uppercase tracking-[0.2em] text-gray-500 mb-1">{label}</p>
+      <p className="font-bold text-orange-300 leading-none" style={{ fontSize: 'clamp(3.25rem, 7vw, 6rem)' }}>
         {value.toLocaleString()}
       </p>
     </div>
