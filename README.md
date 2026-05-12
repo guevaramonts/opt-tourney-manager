@@ -120,3 +120,16 @@ You will need:
 
 ## Need Help?
 If you have any issues, please open an issue on GitHub or ask your project maintainer.
+
+## How the Application Works
+
+The **Pocket Director** (OPT) application serves as a comprehensive management tool for poker tournaments and seasons. It simplifies the orchestration of players, chip counts, and rankings.
+
+### Core Functionality
+- **Tournament Management**: Create and track individual poker games, managing blind levels and player registration.
+- **Season Administration**: Aggregate tournament results over a season to maintain player leaderboards and overall rankings.
+- **Player Database**: Maintain a persistent list of players and their historical performance.
+- **Rules & Logic**: Incorporates automated logic for tournament payouts and ranking point calculations based on specific OPT guidelines.
+
+### Technical Overview
+Built with modern web technologies, the app uses **Node.js** for its runtime environment and **React** (or similar framework) for the user interface, ensuring a responsive experience for organizers on both desktop and mobile devices.
