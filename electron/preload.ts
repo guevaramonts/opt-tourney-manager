@@ -58,6 +58,8 @@ const bridge: IpcBridge = {
   getAllSeasons: () => ipcRenderer.invoke('season:getAll'),
   startSeason: (seasonId) => ipcRenderer.invoke('season:start', seasonId),
   finishSeason: (seasonId) => ipcRenderer.invoke('season:finish', seasonId),
+  getSeasonDeleteImpact: (seasonId) => ipcRenderer.invoke('season:getDeleteImpact', seasonId),
+  deleteSeason: (seasonId) => ipcRenderer.invoke('season:delete', seasonId),
   getSeasonLeaderboard: (seasonId) =>
     ipcRenderer.invoke('season:getLeaderboard', seasonId),
   getSeasonTournaments: (seasonId) =>

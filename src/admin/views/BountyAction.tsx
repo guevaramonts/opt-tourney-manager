@@ -232,57 +232,59 @@ export default function BountyAction() {
       </p>
 
       <form onSubmit={handleAddElimination} className="space-y-4">
-        <div>
-          <label className="block text-sm text-gray-400 mb-1">Winner (took the chips)</label>
-          <select
-            value={winner}
-            onChange={(e) => {
-              const nextWinner = e.target.value;
-              setWinner(nextWinner);
-              setLoser((currentLoser) => {
-                if (!currentLoser) return '';
-                const winnerRow = players.find((p) => String(p.player_id) === nextWinner);
-                const loserRow = players.find((p) => String(p.player_id) === currentLoser);
-                if (!winnerRow || !loserRow) return '';
-                if (winnerRow.table_id === null) return '';
-                return loserRow.table_id === winnerRow.table_id ? currentLoser : '';
-              });
-            }}
-            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
-          >
-            <option value="">— Select winner —</option>
-            {players
-              .filter((p) => String(p.player_id) !== loser)
-              .map((p) => (
-                <option key={p.player_id} value={p.player_id}>
-                  {playerLabel(p)}
-                </option>
-              ))}
-          </select>
-        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Winner (took the chips)</label>
+            <select
+              value={winner}
+              onChange={(e) => {
+                const nextWinner = e.target.value;
+                setWinner(nextWinner);
+                setLoser((currentLoser) => {
+                  if (!currentLoser) return '';
+                  const winnerRow = players.find((p) => String(p.player_id) === nextWinner);
+                  const loserRow = players.find((p) => String(p.player_id) === currentLoser);
+                  if (!winnerRow || !loserRow) return '';
+                  if (winnerRow.table_id === null) return '';
+                  return loserRow.table_id === winnerRow.table_id ? currentLoser : '';
+                });
+              }}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
+            >
+              <option value="">— Select winner —</option>
+              {players
+                .filter((p) => String(p.player_id) !== loser)
+                .map((p) => (
+                  <option key={p.player_id} value={p.player_id}>
+                    {playerLabel(p)}
+                  </option>
+                ))}
+            </select>
+          </div>
 
-        <div>
-          <label className="block text-sm text-gray-400 mb-1">Knocked Out Player</label>
-          <select
-            value={loser}
-            onChange={(e) => setLoser(e.target.value)}
-            disabled={!winner || (selectedWinner?.table_id ?? null) === null}
-            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-400"
-          >
-            <option value="">
-              {!winner
-                ? '— Select winner first —'
-                : (selectedWinner?.table_id ?? null) === null
-                  ? '— Winner must be seated at a table —'
-                  : '— Select knocked out —'}
-            </option>
-            {eligibleLosers
-              .map((p) => (
-                <option key={p.player_id} value={p.player_id}>
-                  {playerLabel(p)}
-                </option>
-              ))}
-          </select>
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Knocked Out Player</label>
+            <select
+              value={loser}
+              onChange={(e) => setLoser(e.target.value)}
+              disabled={!winner || (selectedWinner?.table_id ?? null) === null}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-400"
+            >
+              <option value="">
+                {!winner
+                  ? '— Select winner first —'
+                  : (selectedWinner?.table_id ?? null) === null
+                    ? '— Winner must be seated at a table —'
+                    : '— Select knocked out —'}
+              </option>
+              {eligibleLosers
+                .map((p) => (
+                  <option key={p.player_id} value={p.player_id}>
+                    {playerLabel(p)}
+                  </option>
+                ))}
+            </select>
+          </div>
         </div>
 
         <div className="flex gap-3">

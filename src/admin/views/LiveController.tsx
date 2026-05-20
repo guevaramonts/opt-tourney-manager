@@ -67,18 +67,18 @@ export default function LiveController() {
   }
 
   return (
-    <div className="max-w-lg space-y-6">
+    <div className="max-w-lg space-y-6 text-sm">
       <h2 className="text-lg font-semibold">Live Controller</h2>
 
       {/* Clock Display */}
-      <div className="bg-gray-900 rounded-2xl p-6 text-center border border-gray-800">
+      <div className="bg-gray-900 rounded-2xl p-4 text-center border border-gray-800">
         <p className="text-xs uppercase tracking-widest text-gray-500 mb-1">
           Level {clockState.level}
         </p>
-        <p className="font-mono text-6xl font-bold text-orange-300">
+        <p className="font-mono text-4xl font-bold text-orange-300">
           {minutes}:{seconds}
         </p>
-        <p className="mt-2 text-sm text-gray-400">
+        <p className="mt-2 text-xs text-gray-400">
           {clockState.isBreak
             ? (
               <strong className="text-sky-300">{clockState.breakLabel || 'Break'}</strong>
@@ -90,18 +90,18 @@ export default function LiveController() {
       </div>
 
       {/* Controls */}
-      <div className="flex gap-3 flex-wrap">
+      <div className="flex gap-2 flex-wrap">
         {clockState.running ? (
           <button
             onClick={handlePause}
-            className="px-5 py-2.5 bg-yellow-500 hover:bg-yellow-400 text-gray-900 font-semibold rounded-xl text-sm transition-colors"
+            className="px-4 py-2 bg-yellow-500 hover:bg-yellow-400 text-gray-900 font-semibold rounded-lg text-xs transition-colors"
           >
             ⏸ Pause
           </button>
         ) : (
           <button
             onClick={handlePlay}
-            className="px-5 py-2.5 bg-green-500 hover:bg-green-400 text-gray-900 font-semibold rounded-xl text-sm transition-colors"
+            className="px-4 py-2 bg-green-500 hover:bg-green-400 text-gray-900 font-semibold rounded-lg text-xs transition-colors"
           >
             ▶ Play
           </button>
@@ -109,14 +109,14 @@ export default function LiveController() {
 
         <button
           onClick={handleNextLevel}
-          className="px-5 py-2.5 bg-orange-500 hover:bg-orange-400 text-white font-semibold rounded-xl text-sm transition-colors"
+          className="px-4 py-2 bg-orange-500 hover:bg-orange-400 text-white font-semibold rounded-lg text-xs transition-colors"
         >
           ⏭ Next Level
         </button>
 
         <button
           onClick={handleReset}
-          className="px-5 py-2.5 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-xl text-sm transition-colors"
+          className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg text-xs transition-colors"
         >
           ↺ Reset
         </button>
@@ -124,7 +124,7 @@ export default function LiveController() {
         <button
           onClick={handleResetTournamentProgress}
           disabled={!activeTournament}
-          className="px-5 py-2.5 bg-red-700 hover:bg-red-600 text-white font-semibold rounded-xl text-sm transition-colors disabled:opacity-40"
+          className="px-4 py-2 bg-red-700 hover:bg-red-600 text-white font-semibold rounded-lg text-xs transition-colors disabled:opacity-40"
         >
           Reset Tournament Progress
         </button>

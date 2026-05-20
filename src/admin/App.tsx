@@ -43,6 +43,7 @@ export default function App() {
 
   function handleSeasonSelect(season: Season) {
     setActiveSeason(season);
+    setActiveTournament(null);
     setShowSeasonPicker(false);
   }
 
@@ -53,8 +54,8 @@ export default function App() {
 
   const setupTabs: { id: SetupTab; label: string }[] = [
     { id: 'seasons', label: 'Seasons and Tournaments' },
-    { id: 'players', label: 'Players' },
     { id: 'registration', label: 'Registration' },
+    { id: 'players', label: 'Players' },
     { id: 'blindStructures', label: 'Blind Structures' },
     { id: 'dataTasks', label: 'Data Tasks' },
   ];
@@ -67,7 +68,7 @@ export default function App() {
   return (
     <SeasonContext.Provider value={{ activeSeason, setActiveSeason }}>
     <TournamentContext.Provider value={{ activeTournament, setActiveTournament }}>
-    {showSeasonPicker && <SeasonPickerModal onSelect={handleSeasonSelect} />}
+    {showSeasonPicker && <SeasonPickerModal onSelect={handleSeasonSelect} activeSeasonId={activeSeason?.id ?? null} />}
     <div className="min-h-screen bg-gray-950 text-gray-100 flex flex-col">
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-4 border-b border-gray-800 bg-gray-900">
@@ -75,28 +76,22 @@ export default function App() {
           Olalde Poker <span className="text-orange-400">Tournament Manager</span>
         </h1>
         <div className="flex items-center gap-3">
-          {activeSeason ? (
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-sky-300 bg-sky-950/40 border border-sky-800 rounded-full px-3 py-1">
-                {activeSeason.name}
-              </span>
+          <div className="rounded-xl border border-sky-800/70 bg-sky-950/20 px-3 py-2 min-w-[280px]">
+            <p className="text-[10px] uppercase tracking-wide text-sky-300/80 font-semibold">Season Context</p>
+            <div className="mt-1 flex items-center justify-between gap-3">
+              <p className={`text-sm font-semibold ${activeSeason ? 'text-sky-200' : 'text-yellow-300'}`}>
+                {activeSeason ? activeSeason.name : 'No season selected'}
+              </p>
               <button
                 type="button"
                 onClick={() => setShowSeasonPicker(true)}
-                className="text-xs text-gray-500 hover:text-gray-300 underline underline-offset-2"
+                className="rounded-md border border-sky-700 px-2 py-1 text-xs font-semibold text-sky-200 hover:border-sky-500 hover:text-white transition-colors"
               >
-                Change
+                {activeSeason ? 'Switch Season' : 'Select Season'}
               </button>
             </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowSeasonPicker(true)}
-              className="text-xs text-yellow-400 hover:text-yellow-300 border border-yellow-800 rounded-full px-3 py-1"
-            >
-              Select Season
-            </button>
-          )}
+            <p className="mt-1 text-[11px] text-gray-400">All admin changes are scoped to the selected season.</p>
+          </div>
           {activeTournament ? (
             <span className="text-xs font-semibold text-orange-300 bg-orange-950/40 border border-orange-800 rounded-full px-3 py-1">
               {activeTournament.name}
@@ -116,7 +111,9 @@ export default function App() {
             onClick={() => setMainTab(tab.id)}
             className={`px-6 py-3 text-sm font-semibold transition-colors border-b-2 ${
               mainTab === tab.id
-                ? 'border-orange-400 text-orange-400'
+                ? tab.id === 'live'
+                  ? 'border-sky-400 text-sky-300'
+                  : 'border-emerald-400 text-emerald-300'
                 : 'border-transparent text-gray-400 hover:text-gray-200'
             }`}
           >
@@ -134,7 +131,7 @@ export default function App() {
               onClick={() => setSetupTab(tab.id)}
               className={`px-4 py-2 text-xs font-medium transition-colors border-b-2 ${
                 setupTab === tab.id
-                  ? 'border-orange-300 text-orange-300'
+                  ? 'border-emerald-300 text-emerald-300'
                   : 'border-transparent text-gray-500 hover:text-gray-300'
               }`}
             >
@@ -153,7 +150,7 @@ export default function App() {
               onClick={() => setSeasonsSubTab(tab.id)}
               className={`px-3 py-2 text-xs font-medium transition-colors border-b-2 ${
                 seasonsSubTab === tab.id
-                  ? 'border-orange-300 text-orange-300'
+                  ? 'border-emerald-300 text-emerald-300'
                   : 'border-transparent text-gray-500 hover:text-gray-300'
               }`}
             >

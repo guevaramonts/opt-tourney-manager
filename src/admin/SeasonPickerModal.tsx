@@ -3,9 +3,10 @@ import type { Season } from '@shared/types';
 
 interface Props {
   onSelect: (season: Season) => void;
+  activeSeasonId?: number | null;
 }
 
-export default function SeasonPickerModal({ onSelect }: Props) {
+export default function SeasonPickerModal({ onSelect, activeSeasonId = null }: Props) {
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState('');
@@ -51,9 +52,9 @@ export default function SeasonPickerModal({ onSelect }: Props) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
       <div className="w-full max-w-md rounded-2xl border border-gray-700 bg-gray-900 shadow-2xl p-6 space-y-5">
         <div>
-          <h1 className="text-lg font-bold text-gray-100">Select a Season</h1>
+          <h1 className="text-lg font-bold text-gray-100">Select Season Context</h1>
           <p className="text-sm text-gray-400 mt-1">
-            All views will use this season. You can change it from the header at any time.
+            The selected season is the admin context used across the app.
           </p>
         </div>
 
@@ -68,9 +69,20 @@ export default function SeasonPickerModal({ onSelect }: Props) {
                 <button
                   type="button"
                   onClick={() => onSelect(season)}
-                  className="w-full text-left rounded-xl border border-gray-700 bg-gray-800 hover:border-orange-500 hover:bg-orange-950/20 px-4 py-3 transition-colors"
+                  className={`w-full text-left rounded-xl border px-4 py-3 transition-colors ${
+                    season.id === activeSeasonId
+                      ? 'border-sky-500 bg-sky-950/30'
+                      : 'border-gray-700 bg-gray-800 hover:border-orange-500 hover:bg-orange-950/20'
+                  }`}
                 >
-                  <p className="font-semibold text-sm text-gray-100">{season.name}</p>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-semibold text-sm text-gray-100">{season.name}</p>
+                    {season.id === activeSeasonId && (
+                      <span className="text-[10px] uppercase tracking-wide text-sky-200 border border-sky-600 rounded-full px-2 py-0.5">
+                        Current
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-gray-500 capitalize mt-0.5">{season.status}</p>
                 </button>
               </li>

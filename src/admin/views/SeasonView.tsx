@@ -245,7 +245,7 @@ export default function SeasonView() {
                 value={seasonName}
                 onChange={(e) => setSeasonName(e.target.value)}
                 placeholder="e.g. 2026 Regular Season"
-                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
+                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-orange-400"
               />
               <button
                 type="button"

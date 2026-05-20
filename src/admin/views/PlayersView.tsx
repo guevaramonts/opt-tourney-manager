@@ -157,28 +157,28 @@ export default function PlayersView() {
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             placeholder="Full name…"
-            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
+            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-orange-400"
           />
           <input
             type="text"
             value={newNickname}
             onChange={(e) => setNewNickname(e.target.value)}
             placeholder="Nickname (optional)"
-            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
+            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-orange-400"
           />
           <input
             type="email"
             value={newEmail}
             onChange={(e) => setNewEmail(e.target.value)}
             placeholder="Email (optional)"
-            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
+            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-orange-400"
           />
           <input
             type="tel"
             value={newPhone}
             onChange={(e) => setNewPhone(e.target.value)}
             placeholder="Phone (optional)"
-            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
+            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-orange-400"
           />
         </div>
         <div className="flex justify-end">
@@ -198,26 +198,23 @@ export default function PlayersView() {
       </form>
 
       {/* Roster table */}
-      <div className="rounded-xl border border-gray-800 overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="rounded-xl border border-gray-800 overflow-x-auto">
+        <table className="w-full min-w-[1100px] text-sm">
           <thead>
             <tr className="border-b border-gray-800 bg-gray-900 text-left">
               <th className="px-4 py-3 text-xs uppercase tracking-wider text-gray-500 font-semibold">Name</th>
               <th className="px-4 py-3 text-xs uppercase tracking-wider text-gray-500 font-semibold">Nickname</th>
-              {showSeatNumbers && (
-                <th className="px-4 py-3 text-xs uppercase tracking-wider text-gray-500 font-semibold">Table/Seat</th>
-              )}
               <th className="px-4 py-3 text-xs uppercase tracking-wider text-gray-500 font-semibold">Email</th>
               <th className="px-4 py-3 text-xs uppercase tracking-wider text-gray-500 font-semibold">Phone</th>
               <th className="px-4 py-3 text-xs uppercase tracking-wider text-gray-500 font-semibold text-center">Tournaments</th>
               <th className="px-4 py-3 text-xs uppercase tracking-wider text-gray-500 font-semibold text-right">Career Earnings</th>
-              <th className="w-12" />
+              <th className="px-4 py-3 text-xs uppercase tracking-wider text-gray-500 font-semibold text-right sticky right-0 bg-gray-900">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-800">
             {players.length === 0 ? (
               <tr>
-                <td colSpan={showSeatNumbers ? 8 : 7} className="px-4 py-8 text-center text-gray-600 text-sm italic">
+                <td colSpan={7} className="px-4 py-8 text-center text-gray-600 text-sm italic">
                   No players yet — add someone above
                 </td>
               </tr>
@@ -226,8 +223,8 @@ export default function PlayersView() {
                 const isEditing = editingId === p.id;
                 const seating = activeSeatingByPlayerId[p.id];
                 const seatingLabel = seating
-                  ? `${seating.tableName ?? 'Unseated'}${seating.seatNumber !== null ? ` · Seat ${seating.seatNumber}` : ''}`
-                  : '—';
+                  ? `${seating.tableName ?? 'Unseated'}${showSeatNumbers && seating.seatNumber !== null ? ` · Seat ${seating.seatNumber}` : ''}`
+                  : null;
                 return (
                   <tr key={p.id} className={`${isEditing ? 'bg-gray-800' : 'hover:bg-gray-900/50'} transition-colors group`}>
                     <td className="px-4 py-3">
@@ -236,25 +233,25 @@ export default function PlayersView() {
                           type="text"
                           value={editName}
                           onChange={(e) => setEditName(e.target.value)}
-                          className="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm w-full focus:outline-none focus:border-orange-400"
+                          className="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm text-white w-full focus:outline-none focus:border-orange-400"
                           autoFocus
                         />
                       ) : (
-                        <span className="font-medium text-gray-100">{p.name}</span>
+                        <div>
+                          <span className="font-medium text-gray-100">{p.name}</span>
+                          {seatingLabel && (
+                            <p className="mt-0.5 text-xs text-gray-500">{seatingLabel}</p>
+                          )}
+                        </div>
                       )}
                     </td>
-                    {showSeatNumbers && (
-                      <td className="px-4 py-3 text-gray-400 text-xs">
-                        <span className="font-mono">{seatingLabel}</span>
-                      </td>
-                    )}
                     <td className="px-4 py-3">
                       {isEditing ? (
                         <input
                           type="text"
                           value={editNickname}
                           onChange={(e) => setEditNickname(e.target.value)}
-                          className="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs w-full focus:outline-none focus:border-orange-400"
+                          className="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white w-full focus:outline-none focus:border-orange-400"
                         />
                       ) : (
                         <span className="text-gray-400 text-xs">{p.nickname ?? <span className="text-gray-700">—</span>}</span>
@@ -266,7 +263,7 @@ export default function PlayersView() {
                           type="email"
                           value={editEmail}
                           onChange={(e) => setEditEmail(e.target.value)}
-                          className="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs w-full focus:outline-none focus:border-orange-400"
+                          className="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white w-full focus:outline-none focus:border-orange-400"
                         />
                       ) : (
                         <span className="text-gray-400 text-xs">{p.email ?? <span className="text-gray-700">—</span>}</span>
@@ -278,7 +275,7 @@ export default function PlayersView() {
                           type="tel"
                           value={editPhone}
                           onChange={(e) => setEditPhone(e.target.value)}
-                          className="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs w-full focus:outline-none focus:border-orange-400"
+                          className="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white w-full focus:outline-none focus:border-orange-400"
                         />
                       ) : (
                         <span className="text-gray-400 text-xs">{p.phone ?? <span className="text-gray-700">—</span>}</span>
@@ -292,16 +289,18 @@ export default function PlayersView() {
                         ? `$${p.total_career_earnings.toLocaleString()}`
                         : '—'}
                     </td>
-                    <td className="px-4 py-3 text-right space-x-1">
+                    <td className={`px-4 py-3 text-right space-x-1 sticky right-0 ${isEditing ? 'bg-gray-800' : 'bg-gray-950 group-hover:bg-gray-900/50'}`}>
                       {isEditing ? (
                         <>
                           <button
+                            type="button"
                             onClick={() => handleSave(p.id)}
                             className="text-green-400 hover:text-green-300 text-xs px-2 py-1 rounded transition-colors"
                           >
                             Save
                           </button>
                           <button
+                            type="button"
                             onClick={handleCancel}
                             className="text-gray-500 hover:text-gray-400 text-xs px-2 py-1 rounded transition-colors"
                           >
@@ -311,17 +310,19 @@ export default function PlayersView() {
                       ) : (
                         <>
                           <button
+                            type="button"
                             onClick={() => handleEdit(p)}
-                            className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-orange-400 transition-all text-xs px-2 py-1 rounded"
+                            className="text-orange-300 hover:text-orange-200 border border-orange-800 hover:border-orange-600 transition-colors text-xs px-2 py-1 rounded"
                             title="Edit player"
                           >
                             Edit
                           </button>
                           {(p.tournaments_played ?? 0) === 0 && (
                             <button
+                              type="button"
                               onClick={() => handleDelete(p)}
                               disabled={deletingId === p.id}
-                              className="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-red-400 transition-all disabled:opacity-40 text-xs px-2 py-1 rounded"
+                              className="text-red-300 hover:text-red-200 border border-red-800 hover:border-red-600 transition-colors disabled:opacity-40 text-xs px-2 py-1 rounded"
                               title="Remove from roster"
                             >
                               {deletingId === p.id ? '…' : 'Remove'}
@@ -338,7 +339,7 @@ export default function PlayersView() {
           {players.length > 0 && (
             <tfoot>
               <tr className="border-t border-gray-700 bg-gray-900">
-                <td colSpan={showSeatNumbers ? 8 : 7} className="px-4 py-2 text-center text-xs text-gray-400 tracking-widest select-none">
+                <td colSpan={7} className="px-4 py-2 text-center text-xs text-gray-400 tracking-widest select-none">
                   {eliminatedCount !== null
                     ? `── ${eliminatedCount} player${eliminatedCount === 1 ? '' : 's'} eliminated ──`
                     : `── ${players.length} player${players.length === 1 ? '' : 's'} ──`}

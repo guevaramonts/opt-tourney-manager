@@ -139,6 +139,37 @@ export interface SeasonTournamentEntry {
   synced_results_count: number;
 }
 
+export interface SeasonDeleteImpact {
+  seasonId: number;
+  name: string;
+  linkedTournamentCount: number;
+  sharedTournamentCount: number;
+  exclusiveTournamentCount: number;
+  seasonResultCount: number;
+  registrationCount: number;
+  bountyLogCount: number;
+  tableStateCount: number;
+  blindLevelCount: number;
+  hasData: boolean;
+}
+
+export interface SeasonDeleteResult {
+  ok: boolean;
+  seasonId: number;
+  name: string;
+  impact: SeasonDeleteImpact;
+  deleted: {
+    seasons: number;
+    seasonTournaments: number;
+    seasonResults: number;
+    tournaments: number;
+    registrations: number;
+    bountyLog: number;
+    tableState: number;
+    blindLevels: number;
+  };
+}
+
 export interface ScoringMatrixRow {
   placement: number;
   players_10: number | null;
@@ -474,6 +505,8 @@ export interface IpcBridge {
   getAllSeasons(): Promise<Season[]>;
   startSeason(seasonId: number): Promise<{ ok: boolean; createdTournaments?: number }>;
   finishSeason(seasonId: number): Promise<{ ok: boolean }>;
+  getSeasonDeleteImpact(seasonId: number): Promise<SeasonDeleteImpact>;
+  deleteSeason(seasonId: number): Promise<SeasonDeleteResult>;
   getSeasonLeaderboard(seasonId: number): Promise<SeasonLeaderboardEntry[]>;
   getSeasonTournaments(seasonId: number): Promise<SeasonTournamentEntry[]>;
   addTournamentToSeason(seasonId: number, tournamentId: number, tournamentNumber: number): Promise<{ ok: boolean }>;

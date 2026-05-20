@@ -1642,6 +1642,101 @@ export function registerIpcHandlers(
     return placementPoints + bountyPoints;
   }
 
+  function getSeasonDeleteImpact(seasonId: number) {
+    const season = db
+      .prepare('SELECT id, name FROM seasons WHERE id = ?')
+      .get(seasonId) as { id: number; name: string } | undefined;
+    if (!season) throw new Error('Season not found');
+
+    const linkedTournamentRows = db
+      .prepare('SELECT tournament_id FROM season_tournaments WHERE season_id = ?')
+      .all(seasonId) as Array<{ tournament_id: number }>;
+    const linkedTournamentIds = linkedTournamentRows.map((row) => row.tournament_id);
+
+    const seasonResultCount = (db
+      .prepare('SELECT COUNT(*) AS count FROM season_results WHERE season_id = ?')
+      .get(seasonId) as { count: number }).count;
+
+    let sharedTournamentCount = 0;
+    let exclusiveTournamentCount = 0;
+    let registrationCount = 0;
+    let bountyLogCount = 0;
+    let tableStateCount = 0;
+    let blindLevelCount = 0;
+
+    if (linkedTournamentIds.length > 0) {
+      const placeholders = linkedTournamentIds.map(() => '?').join(', ');
+      const sharedRows = db
+        .prepare(
+          `SELECT DISTINCT tournament_id
+           FROM season_tournaments
+           WHERE season_id != ? AND tournament_id IN (${placeholders})`
+        )
+        .all(seasonId, ...linkedTournamentIds) as Array<{ tournament_id: number }>;
+
+      const sharedIds = new Set(sharedRows.map((row) => row.tournament_id));
+      const exclusiveIds = linkedTournamentIds.filter((id) => !sharedIds.has(id));
+
+      sharedTournamentCount = sharedIds.size;
+      exclusiveTournamentCount = exclusiveIds.length;
+
+      if (exclusiveIds.length > 0) {
+        const exclusivePlaceholders = exclusiveIds.map(() => '?').join(', ');
+        registrationCount = (db
+          .prepare(
+            `SELECT COUNT(*) AS count
+             FROM registrations
+             WHERE tournament_id IN (${exclusivePlaceholders})`
+          )
+          .get(...exclusiveIds) as { count: number }).count;
+
+        bountyLogCount = (db
+          .prepare(
+            `SELECT COUNT(*) AS count
+             FROM bounty_log
+             WHERE tournament_id IN (${exclusivePlaceholders})`
+          )
+          .get(...exclusiveIds) as { count: number }).count;
+
+        tableStateCount = (db
+          .prepare(
+            `SELECT COUNT(*) AS count
+             FROM table_state
+             WHERE tournament_id IN (${exclusivePlaceholders})`
+          )
+          .get(...exclusiveIds) as { count: number }).count;
+
+        blindLevelCount = (db
+          .prepare(
+            `SELECT COUNT(*) AS count
+             FROM blind_structure
+             WHERE tournament_id IN (${exclusivePlaceholders})`
+          )
+          .get(...exclusiveIds) as { count: number }).count;
+      }
+    }
+
+    return {
+      seasonId: season.id,
+      name: season.name,
+      linkedTournamentCount: linkedTournamentIds.length,
+      sharedTournamentCount,
+      exclusiveTournamentCount,
+      seasonResultCount,
+      registrationCount,
+      bountyLogCount,
+      tableStateCount,
+      blindLevelCount,
+      hasData:
+        linkedTournamentIds.length > 0 ||
+        seasonResultCount > 0 ||
+        registrationCount > 0 ||
+        bountyLogCount > 0 ||
+        tableStateCount > 0 ||
+        blindLevelCount > 0,
+    };
+  }
+
   ipcMain.handle('season:create', (_event, name: string) => {
     const trimmed = (name as string).trim();
     if (!trimmed) throw new Error('Season name is required');
@@ -1714,6 +1809,116 @@ export function registerIpcHandlers(
 
     db.prepare("UPDATE seasons SET status = 'finished', end_date = COALESCE(end_date, date('now')) WHERE id = ?").run(seasonId);
     return { ok: true };
+  });
+
+  ipcMain.handle('season:getDeleteImpact', (_event, seasonId: number) => {
+    return getSeasonDeleteImpact(seasonId);
+  });
+
+  ipcMain.handle('season:delete', (_event, seasonId: number) => {
+    const impact = getSeasonDeleteImpact(seasonId);
+
+    const runDelete = db.transaction(() => {
+      const linkedTournamentRows = db
+        .prepare('SELECT tournament_id FROM season_tournaments WHERE season_id = ?')
+        .all(seasonId) as Array<{ tournament_id: number }>;
+      const linkedTournamentIds = linkedTournamentRows.map((row) => row.tournament_id);
+
+      let exclusiveIds: number[] = [];
+      if (linkedTournamentIds.length > 0) {
+        const placeholders = linkedTournamentIds.map(() => '?').join(', ');
+        const sharedRows = db
+          .prepare(
+            `SELECT DISTINCT tournament_id
+             FROM season_tournaments
+             WHERE season_id != ? AND tournament_id IN (${placeholders})`
+          )
+          .all(seasonId, ...linkedTournamentIds) as Array<{ tournament_id: number }>;
+        const sharedIds = new Set(sharedRows.map((row) => row.tournament_id));
+        exclusiveIds = linkedTournamentIds.filter((id) => !sharedIds.has(id));
+      }
+
+      let deletedSeasonResults = 0;
+      let deletedTableState = 0;
+      let deletedBlindLevels = 0;
+      let deletedBountyLog = 0;
+      let deletedRegistrations = 0;
+      let deletedTournaments = 0;
+
+      if (exclusiveIds.length > 0) {
+        const exclusivePlaceholders = exclusiveIds.map(() => '?').join(', ');
+
+        deletedSeasonResults += db
+          .prepare(`DELETE FROM season_results WHERE tournament_id IN (${exclusivePlaceholders})`)
+          .run(...exclusiveIds).changes;
+
+        deletedTableState = db
+          .prepare(`DELETE FROM table_state WHERE tournament_id IN (${exclusivePlaceholders})`)
+          .run(...exclusiveIds).changes;
+
+        deletedBlindLevels = db
+          .prepare(`DELETE FROM blind_structure WHERE tournament_id IN (${exclusivePlaceholders})`)
+          .run(...exclusiveIds).changes;
+
+        deletedBountyLog = db
+          .prepare(`DELETE FROM bounty_log WHERE tournament_id IN (${exclusivePlaceholders})`)
+          .run(...exclusiveIds).changes;
+
+        deletedRegistrations = db
+          .prepare(`DELETE FROM registrations WHERE tournament_id IN (${exclusivePlaceholders})`)
+          .run(...exclusiveIds).changes;
+
+      }
+
+      if (exclusiveIds.length > 0) {
+        const exclusivePlaceholders = exclusiveIds.map(() => '?').join(', ');
+        deletedSeasonResults += db
+          .prepare(`DELETE FROM season_results WHERE season_id = ? AND tournament_id NOT IN (${exclusivePlaceholders})`)
+          .run(seasonId, ...exclusiveIds).changes;
+      } else {
+        deletedSeasonResults += db
+          .prepare('DELETE FROM season_results WHERE season_id = ?')
+          .run(seasonId).changes;
+      }
+
+      const deletedSeasonTournaments = db
+        .prepare('DELETE FROM season_tournaments WHERE season_id = ?')
+        .run(seasonId).changes;
+
+      if (exclusiveIds.length > 0) {
+        const exclusivePlaceholders = exclusiveIds.map(() => '?').join(', ');
+        deletedTournaments = db
+          .prepare(`DELETE FROM tournaments WHERE id IN (${exclusivePlaceholders})`)
+          .run(...exclusiveIds).changes;
+      }
+
+      const deletedSeasons = db
+        .prepare('DELETE FROM seasons WHERE id = ?')
+        .run(seasonId).changes;
+
+      if (deletedSeasons !== 1) {
+        throw new Error('Failed to delete season');
+      }
+
+      return {
+        seasons: deletedSeasons,
+        seasonTournaments: deletedSeasonTournaments,
+        seasonResults: deletedSeasonResults,
+        tournaments: deletedTournaments,
+        registrations: deletedRegistrations,
+        bountyLog: deletedBountyLog,
+        tableState: deletedTableState,
+        blindLevels: deletedBlindLevels,
+      };
+    });
+
+    return {
+      ok: true,
+      seasonId,
+      name: impact.name,
+      impact,
+      deleted: runDelete(),
+    };
   });
 
   ipcMain.handle('season:getLeaderboard', (_event, seasonId: number) => {

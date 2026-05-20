@@ -102,6 +102,50 @@ export default function SeasonsSubView() {
     }
   }
 
+  async function handleDeleteSeason() {
+    if (!activeSeason) return;
+
+    setBusy(true);
+    setStatus(null);
+    try {
+      let impact: Awaited<ReturnType<typeof window.api.getSeasonDeleteImpact>> | null = null;
+      try {
+        impact = await window.api.getSeasonDeleteImpact(activeSeason.id);
+      } catch (err) {
+        const message = String(err);
+        if (!message.includes("No handler registered for 'season:getDeleteImpact'")) {
+          throw err;
+        }
+      }
+
+      const confirmationMessage = impact?.hasData
+        ? `Delete "${activeSeason.name}"? This will permanently clear all associated season data, including ${impact.seasonResultCount} season result row${impact.seasonResultCount === 1 ? '' : 's'} and ${impact.linkedTournamentCount} linked tournament${impact.linkedTournamentCount === 1 ? '' : 's'}. Continue?`
+        : impact
+          ? `Delete "${activeSeason.name}"?`
+          : `Delete "${activeSeason.name}"? This will permanently remove the season and may clear associated season data. Continue?`;
+
+      if (!confirm(confirmationMessage)) {
+        return;
+      }
+
+      const result = await window.api.deleteSeason(activeSeason.id);
+      setActiveSeason(null);
+      setSeasonTournaments([]);
+      setLeaderboard([]);
+      await refreshAll();
+      setStatus({
+        ok: true,
+        text:
+          `Deleted season "${result.name}". Removed ${result.deleted.seasonResults} season result row${result.deleted.seasonResults === 1 ? '' : 's'} and ` +
+          `${result.deleted.tournaments} tournament${result.deleted.tournaments === 1 ? '' : 's'}.`,
+      });
+    } catch (err) {
+      setStatus({ text: String(err), ok: false });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleSyncAllLinked() {
     if (activeSeason === null || seasonTournaments.length === 0) return;
 
@@ -196,6 +240,14 @@ export default function SeasonsSubView() {
                 className="rounded-md border border-red-700 px-3 py-1.5 text-xs font-semibold text-red-300 hover:border-red-500 disabled:opacity-40"
               >
                 Finish
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteSeason}
+                disabled={busy}
+                className="rounded-md border border-rose-700 px-3 py-1.5 text-xs font-semibold text-rose-300 hover:border-rose-500 disabled:opacity-40"
+              >
+                Delete
               </button>
             </div>
           </div>
