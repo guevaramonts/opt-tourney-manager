@@ -1,9 +1,20 @@
+import { auth } from '../auth/firebase';
+
 const BASE = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api';
 
+async function getAuthHeaders(method: string): Promise<Record<string, string>> {
+  if (method === 'GET') return {};
+  const user = auth.currentUser;
+  if (!user) return {};
+  const token = await user.getIdToken();
+  return { Authorization: `Bearer ${token}` };
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const authHeaders = await getAuthHeaders(method);
   const res = await fetch(`${BASE}${path}`, {
     method,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {

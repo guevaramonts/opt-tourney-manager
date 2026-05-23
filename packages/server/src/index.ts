@@ -7,6 +7,7 @@ import { initClockService } from './services/clockService';
 import { setIo } from './services/io';
 import { registerSocketHandlers } from './sockets/socketHandler';
 import { errorHandler } from './middleware/errorHandler';
+import { requireAdmin } from './middleware/requireAdmin';
 import healthRouter from './routes/health';
 import clockRouter from './routes/clock';
 import tournamentsRouter from './routes/tournaments';
@@ -35,7 +36,15 @@ registerSocketHandlers(io);
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
+// Public routes — no auth required
 app.use('/api/health', healthRouter);
+
+// All POST / PUT / DELETE across every /api route requires a valid admin token
+app.use('/api', (req, res, next) => {
+  if (req.method === 'GET') return next();
+  requireAdmin(req, res, next);
+});
+
 app.use('/api/clock', clockRouter);
 app.use('/api/tournaments', tournamentsRouter);
 app.use('/api/players', playersRouter);
