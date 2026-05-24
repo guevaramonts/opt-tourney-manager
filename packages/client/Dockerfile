@@ -3,6 +3,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY postcss.config.js ./
+COPY tailwind.config.js ./
 COPY tsconfig.json ./
 COPY vite.config.ts ./
 COPY index.html ./
