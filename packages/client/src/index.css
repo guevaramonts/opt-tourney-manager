@@ -1,4 +1,7 @@
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+*, *::before, *::after { box-sizing: border-box; }
 body { background: #0a0a0a; color: #fff; font-family: system-ui, -apple-system, sans-serif; }
-button { font-family: inherit; }
-select { font-family: inherit; }
+
