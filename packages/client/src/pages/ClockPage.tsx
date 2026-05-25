@@ -1,126 +1,154 @@
-import { useClockState, usePlayerEliminated, useSeatsAssigned } from '../api/socket';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { api } from '../api/client';
+import { useClockState, usePlayerEliminated, useSeatsAssigned, useTournamentProgressReset } from '../api/socket';
+import TournamentClock from '../views/clock/TournamentClock';
+import PayoutPanel from '../views/clock/PayoutPanel';
+import SeatingChart from '../views/clock/SeatingChart';
+import AssassinFeed from '../views/clock/AssassinFeed';
+import PointsFeed from '../views/clock/PointsFeed';
+import type { PayoutResult } from '../views/clock/PayoutPanel';
+import type { BountyEntry } from '../views/clock/AssassinFeed';
+import type { LivePointAward } from '../views/clock/PointsFeed';
+import type { SeatChartEntry } from '../views/clock/SeatingChart';
 
-function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
-
+interface Tournament { id: number; name: string; status: string; player_count?: number; }
+interface Player { id: number; name: string; nickname: string | null; }
 interface EliminationEvent {
-  killerName: string;
-  victimName: string;
-  placement: number;
-  leaderboard: Array<{ name: string; bounties_collected: number }>;
+  victimId: number; victimName: string | null;
+  awards: LivePointAward[];
+  leaderboard: BountyEntry[];
 }
 
 export default function ClockPage() {
   const clock = useClockState();
-  const [lastElim, setLastElim] = useState<EliminationEvent | null>(null);
-  const [seatChart, setSeatChart] = useState<Array<{ player_name: string; table_name: string; seat_number: number }>>([]);
+  const [leaderboard, setLeaderboard] = useState<BountyEntry[]>([]);
+  const [seating, setSeating] = useState<SeatChartEntry[]>([]);
+  const [payouts, setPayouts] = useState<PayoutResult | null>(null);
+  const [pointAwards, setPointAwards] = useState<Array<LivePointAward & { id: string }>>([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const activeTournamentIdRef = useRef<number | null>(null);
+  const displayNameByRealRef = useRef<Record<string, string>>({});
 
-  const onElim = useCallback((payload: unknown) => {
-    const e = payload as EliminationEvent;
-    setLastElim(e);
-    setTimeout(() => setLastElim(null), 8000);
+  function displayName(realName: string | null | undefined): string {
+    if (!realName) return '';
+    return displayNameByRealRef.current[realName] ?? realName;
+  }
+
+  const loadSidebarData = useCallback(async () => {
+    try {
+      const [tournaments, players] = await Promise.all([
+        api.getAllTournaments() as Promise<Tournament[]>,
+        api.getAllPlayers() as Promise<Player[]>,
+      ]);
+
+      const active =
+        tournaments.find((t) => t.status === 'pending' && (t.player_count ?? 0) > 0) ??
+        tournaments.find((t) => t.status === 'pending') ??
+        tournaments.find((t) => t.status !== 'finished' && t.status !== 'finalized') ??
+        tournaments[0];
+
+      if (!active) {
+        activeTournamentIdRef.current = null;
+        setLeaderboard([]); setSeating([]); setPayouts(null); setPointAwards([]);
+        return;
+      }
+
+      if (activeTournamentIdRef.current !== active.id) setPointAwards([]);
+      activeTournamentIdRef.current = active.id;
+
+      displayNameByRealRef.current = Object.fromEntries(
+        players.map((p) => [p.name, p.nickname?.trim() ? p.nickname : p.name])
+      );
+
+      const [assignments, payout, bountyLeaders] = await Promise.all([
+        api.getTableAssignments(active.id) as Promise<Array<{ player_name: string | null; table_name: string; seat_number: number | null }>>,
+        api.calculatePayouts(active.id) as Promise<PayoutResult>,
+        api.getBountyLeaderboard(active.id) as Promise<BountyEntry[]>,
+      ]);
+
+      setSeating(
+        assignments
+          .filter((r) => r.player_name)
+          .map((r) => ({
+            player_name: displayName(r.player_name),
+            table_name: r.table_name,
+            seat_number: r.seat_number ?? 0,
+          }))
+      );
+      setPayouts(payout);
+      setLeaderboard(bountyLeaders.map((e) => ({ ...e, name: displayName(e.name) })));
+    } catch {
+      // ignore transient errors during startup
+    }
   }, []);
 
-  const onSeats = useCallback((payload: unknown) => {
-    const p = payload as { chart: typeof seatChart };
-    setSeatChart(p.chart ?? []);
-  }, []);
+  useEffect(() => { void loadSidebarData(); }, [loadSidebarData]);
 
-  usePlayerEliminated(onElim);
-  useSeatsAssigned(onSeats);
+  usePlayerEliminated(useCallback((payload: unknown) => {
+    const ev = payload as EliminationEvent;
+    setLeaderboard(ev.leaderboard.map((e) => ({ ...e, name: displayName(e.name) })));
+
+    if (ev.awards?.length > 0) {
+      const stamped = Date.now();
+      setPointAwards((prev) =>
+        [...ev.awards.map((a, i) => ({
+          ...a,
+          playerName: displayName(a.playerName),
+          id: `${stamped}-${ev.victimId}-${i}`,
+        })), ...prev].slice(0, 16)
+      );
+    }
+
+    if (ev.victimName) {
+      const victimDisplay = displayName(ev.victimName);
+      setSeating((prev) => prev.filter((s) => s.player_name !== victimDisplay));
+    }
+
+    const tid = activeTournamentIdRef.current;
+    if (tid !== null) {
+      void (api.calculatePayouts(tid) as Promise<PayoutResult>).then(setPayouts).catch(() => {});
+    }
+  }, [])); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useSeatsAssigned(useCallback(() => { void loadSidebarData(); }, [loadSidebarData]));
+  useTournamentProgressReset(useCallback(() => { setPointAwards([]); void loadSidebarData(); }, [loadSidebarData]));
 
   if (!clock) {
     return (
-      <div style={styles.container}>
-        <div style={styles.connecting}>Connecting…</div>
+      <div className="h-screen bg-felt-900 flex items-center justify-center">
+        <p className="text-gray-500 text-2xl font-mono tracking-widest">Connecting…</p>
       </div>
     );
   }
 
-  const tableGroups: Record<string, typeof seatChart> = {};
-  for (const entry of seatChart) {
-    if (!tableGroups[entry.table_name]) tableGroups[entry.table_name] = [];
-    tableGroups[entry.table_name].push(entry);
-  }
-
   return (
-    <div style={styles.container}>
-      {/* Clock header */}
-      <div style={styles.header}>
-        <div style={styles.levelBadge}>
-          {clock.isBreak ? (clock.breakLabel ?? 'BREAK') : `Level ${clock.level}`}
+    <div className="h-screen bg-felt-900 text-white flex overflow-hidden">
+      {/* Left sidebar: payouts + seating chart */}
+      <aside className="w-72 border-r border-green-900/40 flex flex-col px-4 py-4 overflow-hidden h-screen">
+        <div className="mb-3 flex justify-end">
+          <button
+            type="button"
+            onClick={() => { setRefreshing(true); void loadSidebarData().finally(() => setRefreshing(false)); }}
+            disabled={refreshing}
+            className="rounded-md border border-gray-700 bg-gray-900/70 px-3 py-1.5 text-xs font-semibold text-gray-200 hover:border-orange-500 hover:text-orange-300 disabled:opacity-40"
+          >
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </button>
         </div>
-        {!clock.isBreak && (
-          <div style={styles.blinds}>
-            {clock.smallBlind}/{clock.bigBlind}
-            {clock.ante > 0 && <span> (Ante {clock.ante})</span>}
-          </div>
-        )}
-        <div style={{ ...styles.timer, color: clock.remainingSeconds <= 60 ? '#ff4444' : '#fff' }}>
-          {formatTime(clock.remainingSeconds)}
-        </div>
-        {clock.nextSmallBlind && (
-          <div style={styles.nextLevel}>
-            Next: {clock.nextIsBreak ? (clock.nextBreakLabel ?? 'Break') : `${clock.nextSmallBlind}/${clock.nextBigBlind}${clock.nextAnte ? ` (Ante ${clock.nextAnte})` : ''}`}
-          </div>
-        )}
+        <PayoutPanel payouts={payouts} />
+        <SeatingChart entries={seating} showSeatNumbers={!clock.running} />
+      </aside>
+
+      {/* Center: main clock */}
+      <div className="flex-1 flex items-center justify-center">
+        <TournamentClock clock={clock} />
       </div>
 
-      {/* Elimination toast */}
-      {lastElim && (
-        <div style={styles.elimToast}>
-          <div style={styles.elimTitle}>Player Eliminated — #{lastElim.placement}</div>
-          <div style={styles.elimDetail}>{lastElim.killerName} eliminated {lastElim.victimName}</div>
-          {lastElim.leaderboard.length > 0 && (
-            <div style={styles.leaderboard}>
-              <div style={{ fontWeight: 'bold', marginBottom: 4 }}>Bounty Leaders</div>
-              {lastElim.leaderboard.map((e, i) => (
-                <div key={i}>{e.name}: {e.bounties_collected} 🎯</div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Seat chart */}
-      {seatChart.length > 0 && (
-        <div style={styles.seating}>
-          {Object.entries(tableGroups).map(([tableName, seats]) => (
-            <div key={tableName} style={styles.tableCard}>
-              <div style={styles.tableName}>{tableName}</div>
-              {seats.sort((a, b) => a.seat_number - b.seat_number).map((s) => (
-                <div key={s.seat_number} style={styles.seat}>
-                  <span style={styles.seatNum}>{s.seat_number}</span>
-                  <span>{s.player_name}</span>
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
+      {/* Right sidebar: live points feed + bounty leaderboard */}
+      <aside className="w-72 border-l border-green-900/40 flex flex-col px-4 py-4 overflow-hidden h-screen">
+        <PointsFeed entries={pointAwards} />
+        <AssassinFeed entries={leaderboard} />
+      </aside>
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: { background: '#0a0a0a', color: '#fff', minHeight: '100vh', fontFamily: 'monospace', padding: 24 },
-  connecting: { fontSize: 24, textAlign: 'center', marginTop: 100, color: '#888' },
-  header: { textAlign: 'center', marginBottom: 32 },
-  levelBadge: { fontSize: 20, color: '#888', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 4 },
-  blinds: { fontSize: 32, color: '#ccc', marginBottom: 8 },
-  timer: { fontSize: 96, fontWeight: 'bold', lineHeight: 1, marginBottom: 8 },
-  nextLevel: { fontSize: 16, color: '#666' },
-  elimToast: { background: '#1a0a0a', border: '1px solid #ff4444', borderRadius: 8, padding: 16, marginBottom: 24, maxWidth: 480, margin: '0 auto 24px' },
-  elimTitle: { fontSize: 18, fontWeight: 'bold', color: '#ff4444', marginBottom: 4 },
-  elimDetail: { color: '#ccc', marginBottom: 8 },
-  leaderboard: { color: '#aaa', fontSize: 14 },
-  seating: { display: 'flex', flexWrap: 'wrap', gap: 16, justifyContent: 'center' },
-  tableCard: { background: '#111', border: '1px solid #333', borderRadius: 8, padding: 12, minWidth: 160 },
-  tableName: { fontSize: 14, fontWeight: 'bold', color: '#888', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 8, borderBottom: '1px solid #333', paddingBottom: 6 },
-  seat: { display: 'flex', gap: 8, padding: '4px 0', fontSize: 14 },
-  seatNum: { color: '#555', minWidth: 20 },
-};

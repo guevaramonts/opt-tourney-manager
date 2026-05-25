@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { useClockState, useSeatsAssigned, usePlayerEliminated, useTournamentProgressReset } from '../api/socket';
 import { useTournament } from '../contexts/TournamentContext';
@@ -41,7 +41,6 @@ interface TournamentFinalizeSummaryRow {
 export default function InTournamentManager() {
   const { activeTournament, setActiveTournament } = useTournament();
   const tournamentId = activeTournament?.id ?? null;
-  const showSeatNumbers = activeTournament?.status === 'pending';
   const clock = useClockState();
 
   const [seasons, setSeasons] = useState<Season[]>([]);
@@ -58,6 +57,7 @@ export default function InTournamentManager() {
   const [executingConsolidation, setExecutingConsolidation] = useState(false);
   const [resettingSeating, setResettingSeating] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const autoDetectedRef = useRef(false);
 
   const refresh = useCallback(async () => {
     const [list, seasonList] = await Promise.all([
@@ -90,6 +90,27 @@ export default function InTournamentManager() {
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => { setFinalizeSummary([]); }, [tournamentId]);
 
+  // Auto-select the active season's only non-finished tournament on first load
+  useEffect(() => {
+    if (autoDetectedRef.current || activeTournament || seasons.length === 0) return;
+    autoDetectedRef.current = true;
+    const active = seasons.find((s) => s.status === 'active');
+    if (!active) return;
+    void (async () => {
+      setSelectedSeasonId(active.id);
+      const entries = await api.getSeasonTournaments(active.id) as SeasonTournamentEntry[];
+      setSeasonTournaments(entries);
+      const notDone = entries.filter((t) => t.tournament_status !== 'finished');
+      if (notDone.length !== 1) return;
+      const entry = notDone[0];
+      const full = tournaments.find((t) => t.id === entry.tournament_id) ?? {
+        id: entry.tournament_id, name: entry.tournament_name,
+        buy_in: 0, bounty_amount: 0, status: entry.tournament_status,
+      } as Tournament;
+      setActiveTournament(full);
+    })();
+  }, [seasons, tournaments, activeTournament]);
+
   useSeatsAssigned(useCallback(() => { void refresh(); }, [refresh]));
   usePlayerEliminated(useCallback(() => { void refresh(); }, [refresh]));
   useTournamentProgressReset(useCallback(() => { void refresh(); }, [refresh]));
@@ -108,6 +129,10 @@ export default function InTournamentManager() {
       tableId, tableName: table.name, playerCount: table.count, seats: table.seats.sort((a, b) => a - b),
     }));
   }, [assignments]);
+
+  const registeredCount = seasonTournaments.find((t) => t.tournament_id === tournamentId)?.player_count ?? 0;
+  const tournamentHasStarted = registeredCount > 0 && activePlayers.length < registeredCount;
+  const showSeatNumbers = !tournamentHasStarted;
 
   const tablesInUse = tableLoad.filter((t) => t.playerCount > 0);
   const maxTable = tablesInUse.reduce((max, t) => Math.max(max, t.playerCount), 0);
@@ -237,7 +262,7 @@ export default function InTournamentManager() {
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
         <div className="rounded-2xl border border-gray-800 bg-gray-900/40 p-5"><LiveController /></div>
-        <div className="rounded-2xl border border-gray-800 bg-gray-900/40 p-5"><BountyAction /></div>
+        <div className="rounded-2xl border border-gray-800 bg-gray-900/40 p-5"><BountyAction showSeatNumbers={showSeatNumbers} /></div>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-start">

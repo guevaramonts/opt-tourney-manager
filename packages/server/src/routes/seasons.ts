@@ -48,7 +48,7 @@ router.post('/:id/start', async (req, res, next) => {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      await client.query("UPDATE seasons SET status='active', start_date=COALESCE(start_date,CURRENT_DATE) WHERE id=$1", [seasonId]);
+      await client.query("UPDATE seasons SET status='active', start_date=COALESCE(start_date,CURRENT_DATE::text) WHERE id=$1", [seasonId]);
       const { rows: linked } = await client.query('SELECT tournament_number FROM season_tournaments WHERE season_id=$1', [seasonId]);
       const linkedNums = new Set(linked.map((r: { tournament_number: number }) => r.tournament_number));
       let created = 0;
@@ -80,7 +80,7 @@ router.post('/:id/finish', async (req, res, next) => {
     const seasonId = parseInt(req.params.id);
     const exists = await pool.query('SELECT id FROM seasons WHERE id=$1', [seasonId]);
     if ((exists.rowCount ?? 0) === 0) { res.status(404).json({ error: 'Not found' }); return; }
-    await pool.query("UPDATE seasons SET status='finished', end_date=COALESCE(end_date,CURRENT_DATE) WHERE id=$1", [seasonId]);
+    await pool.query("UPDATE seasons SET status='finished', end_date=COALESCE(end_date,CURRENT_DATE::text) WHERE id=$1", [seasonId]);
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

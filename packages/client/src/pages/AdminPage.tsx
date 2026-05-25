@@ -35,8 +35,14 @@ function AdminLayout() {
   const loadSeasons = useCallback(async () => {
     const rows = await api.getAllSeasons() as Season[];
     setSeasons(rows);
-    if (activeSeason && !rows.some((s) => s.id === activeSeason.id)) {
-      setActiveSeason(null);
+    if (activeSeason) {
+      if (!rows.some((s) => s.id === activeSeason.id)) setActiveSeason(null);
+    } else {
+      const savedId = localStorage.getItem('opt_season_id');
+      if (savedId) {
+        const found = rows.find((s) => s.id === Number(savedId));
+        if (found) setActiveSeason(found);
+      }
     }
   }, [activeSeason, setActiveSeason]);
 
@@ -65,7 +71,12 @@ function AdminLayout() {
             <span className="text-base font-bold tracking-wide text-orange-400">OPT Admin</span>
             <select
               value={activeSeason?.id ?? ''}
-              onChange={(e) => setActiveSeason(seasons.find((s) => s.id === Number(e.target.value)) ?? null)}
+              onChange={(e) => {
+                const season = seasons.find((s) => s.id === Number(e.target.value)) ?? null;
+                setActiveSeason(season);
+                if (season) localStorage.setItem('opt_season_id', String(season.id));
+                else localStorage.removeItem('opt_season_id');
+              }}
               className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-orange-400 min-w-[180px]"
             >
               <option value="">— Select season —</option>

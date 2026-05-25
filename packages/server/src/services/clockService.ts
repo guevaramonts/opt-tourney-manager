@@ -34,6 +34,7 @@ export async function clockPlay(tournamentId?: number): Promise<{ running: boole
 
 export function clockPause(): { running: boolean } {
   engine.pause();
+  io?.emit('clock:tick', engine.getState());
   return { running: false };
 }
 
