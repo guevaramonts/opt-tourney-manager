@@ -77,7 +77,7 @@ export default function HomePage() {
       <header className="border-b border-green-900/40 px-6 py-4 flex items-center justify-between max-w-5xl mx-auto">
         <div className="flex items-center gap-3">
           <span className="text-2xl font-black tracking-tight text-white">♠ OPT</span>
-          <span className="text-sm text-gray-500 hidden sm:block">Occasional Poker Tournament</span>
+          <span className="text-sm text-gray-500 hidden sm:block">Olalde Poker Tournament</span>
         </div>
         <nav className="flex gap-4 text-xs text-gray-500">
           <a href="/clock" className="hover:text-orange-400 transition-colors">Clock</a>
