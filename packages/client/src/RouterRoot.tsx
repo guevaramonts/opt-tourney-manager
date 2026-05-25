@@ -12,7 +12,7 @@ export default function RouterRoot() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/admin/*" element={<RequireAdmin><AdminPage /></RequireAdmin>} />
-          <Route path="/clock" element={<ClockPage />} />
+          <Route path="/clock" element={<RequireAdmin><ClockPage /></RequireAdmin>} />
           <Route path="*" element={<Navigate to="/clock" replace />} />
         </Routes>
       </BrowserRouter>
