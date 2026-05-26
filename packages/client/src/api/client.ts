@@ -2,8 +2,9 @@ import { auth } from '../auth/firebase';
 
 const BASE = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api';
 
-async function getAuthHeaders(method: string): Promise<Record<string, string>> {
-  if (method === 'GET') return {};
+async function getAuthHeaders(method: string, path: string): Promise<Record<string, string>> {
+  const needsAuth = method !== 'GET' || path.startsWith('/player');
+  if (!needsAuth) return {};
   const user = auth.currentUser;
   if (!user) return {};
   const token = await user.getIdToken();
@@ -11,7 +12,7 @@ async function getAuthHeaders(method: string): Promise<Record<string, string>> {
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const authHeaders = await getAuthHeaders(method);
+  const authHeaders = await getAuthHeaders(method, path);
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers: { 'Content-Type': 'application/json', ...authHeaders },
@@ -99,4 +100,20 @@ export const api = {
 
   // Data
   resetAllDataKeepPlayers: () => post<unknown>('/data/reset-keep-players'),
+
+  // Invitations (admin)
+  sendInvitations: (tournamentId: number, emails: string[]) =>
+    post<{ results: Array<{ email: string; status: string; reason?: string }> }>('/invitations', { tournamentId, emails }),
+  getInvitations: (tournamentId: number) =>
+    get<Array<{ id: number; email: string; status: string; created_at: string }>>(`/invitations?tournamentId=${tournamentId}`),
+  revokeInvitation: (id: number) => del<{ ok: boolean }>(`/invitations/${id}`),
+  validateInvitationToken: (token: string) =>
+    get<{ valid: boolean; email?: string; tournament_id?: number; tournament_name?: string; error?: string }>(`/invitations/${token}`),
+
+  // Player self-service
+  playerLink: (data: { name?: string; nickname?: string; phone?: string }) =>
+    post<unknown>('/player/link', data),
+  playerMe: () => get<unknown>('/player/me'),
+  playerAcceptInvitation: (token: string) =>
+    post<{ ok: boolean; tournament_id: number; tournament_name: string }>('/player/accept-invitation', { token }),
 };

@@ -206,6 +206,25 @@ function ensureSeedData(db: Database.Database): void {
   if (!hasNickname) {
     db.exec('ALTER TABLE players ADD COLUMN nickname TEXT');
   }
+  const hasFirebaseUid = db
+    .prepare("SELECT 1 FROM pragma_table_info('players') WHERE name = 'firebase_uid'")
+    .get();
+  if (!hasFirebaseUid) {
+    db.exec('ALTER TABLE players ADD COLUMN firebase_uid TEXT UNIQUE');
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS invitations (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      tournament_id INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+      email         TEXT    NOT NULL,
+      token         TEXT    NOT NULL UNIQUE,
+      status        TEXT    NOT NULL DEFAULT 'pending',
+      created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+      expires_at    TEXT,
+      UNIQUE(tournament_id, email)
+    )
+  `);
 
   const hasTournamentBlindStructure = db
     .prepare("SELECT 1 FROM pragma_table_info('tournaments') WHERE name = 'blind_structure_id'")

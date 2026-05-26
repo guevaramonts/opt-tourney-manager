@@ -3,9 +3,6 @@ import https from 'https';
 import jwt from 'jsonwebtoken';
 
 const PROJECT_ID = process.env.FIREBASE_PROJECT_ID ?? '';
-const ADMIN_UIDS = new Set(
-  (process.env.ADMIN_UID_WHITELIST ?? '').split(',').map((s) => s.trim()).filter(Boolean)
-);
 
 const CERTS_URL =
   'https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com';
@@ -33,7 +30,17 @@ async function getPublicKeys(): Promise<Record<string, string>> {
   return fetchPublicKeys();
 }
 
-export async function requireAdmin(req: Request, res: Response, next: NextFunction) {
+declare global {
+  namespace Express {
+    interface Request {
+      firebaseUid?: string;
+      firebaseEmail?: string;
+      firebaseName?: string;
+    }
+  }
+}
+
+export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
     res.status(401).json({ error: 'Unauthorized' });
@@ -54,12 +61,7 @@ export async function requireAdmin(req: Request, res: Response, next: NextFuncti
       issuer: `https://securetoken.google.com/${PROJECT_ID}`,
     }) as { uid?: string; sub?: string; email?: string; name?: string };
 
-    const uid = payload.uid ?? payload.sub ?? '';
-    if (ADMIN_UIDS.size > 0 && !ADMIN_UIDS.has(uid)) {
-      res.status(403).json({ error: 'Forbidden' });
-      return;
-    }
-    req.firebaseUid = uid;
+    req.firebaseUid = payload.uid ?? payload.sub ?? '';
     req.firebaseEmail = payload.email ?? '';
     req.firebaseName = payload.name ?? '';
     next();

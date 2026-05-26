@@ -10,6 +10,105 @@ interface SeasonTournamentEntry {
   tournament_name: string; tournament_status: string;
   player_count: number; synced_results_count: number;
 }
+interface Invitation { id: number; email: string; status: string; created_at: string; }
+
+function InvitePanel({ tournamentId, tournamentName }: { tournamentId: number; tournamentName: string }) {
+  const [open, setOpen] = useState(false);
+  const [emailInput, setEmailInput] = useState('');
+  const [invitations, setInvitations] = useState<Invitation[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<{ text: string; ok: boolean } | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    void api.getInvitations(tournamentId).then(setInvitations);
+  }, [open, tournamentId]);
+
+  async function handleSend() {
+    const emails = emailInput.split(/[\n,]+/).map((e) => e.trim()).filter(Boolean);
+    if (emails.length === 0) { setStatus({ text: 'Enter at least one email address.', ok: false }); return; }
+    setBusy(true); setStatus(null);
+    try {
+      const { results } = await api.sendInvitations(tournamentId, emails);
+      const sent = results.filter((r) => r.status === 'sent').length;
+      const skipped = results.filter((r) => r.status === 'skipped').length;
+      setStatus({ text: `Sent ${sent} invitation${sent !== 1 ? 's' : ''}${skipped > 0 ? `, ${skipped} skipped` : ''}.`, ok: true });
+      setEmailInput('');
+      setInvitations(await api.getInvitations(tournamentId));
+    } catch (err) { setStatus({ text: String(err), ok: false }); }
+    finally { setBusy(false); }
+  }
+
+  async function handleRevoke(id: number) {
+    setBusy(true);
+    try {
+      await api.revokeInvitation(id);
+      setInvitations(await api.getInvitations(tournamentId));
+    } catch (err) { setStatus({ text: String(err), ok: false }); }
+    finally { setBusy(false); }
+  }
+
+  const statusColor = (s: string) =>
+    s === 'accepted' ? 'text-green-400' : s === 'expired' ? 'text-gray-600' : 'text-yellow-400';
+
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="text-xs text-purple-400 hover:text-purple-300 underline-offset-2 hover:underline"
+      >
+        {open ? 'Hide Invitations' : `Invite Players to ${tournamentName}`}
+      </button>
+      {open && (
+        <div className="mt-3 space-y-3 rounded-lg border border-purple-900/40 bg-purple-950/10 p-3">
+          <div className="space-y-2">
+            <p className="text-xs text-gray-500">Enter one email per line, or comma-separated.</p>
+            <textarea
+              value={emailInput}
+              onChange={(e) => setEmailInput(e.target.value)}
+              rows={3}
+              placeholder="alice@example.com&#10;bob@example.com"
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:border-purple-500"
+            />
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => void handleSend()}
+                disabled={busy || !emailInput.trim()}
+                className="rounded-lg bg-purple-700 hover:bg-purple-600 disabled:opacity-40 text-white text-xs font-semibold px-4 py-2"
+              >
+                {busy ? 'Sending…' : 'Send Invitations'}
+              </button>
+              {status && <p className={`text-xs ${status.ok ? 'text-green-400' : 'text-red-400'}`}>{status.text}</p>}
+            </div>
+          </div>
+          {invitations.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-xs uppercase tracking-wide text-gray-600">Sent Invitations</p>
+              {invitations.map((inv) => (
+                <div key={inv.id} className="flex items-center justify-between text-xs gap-2">
+                  <span className="text-gray-300 truncate">{inv.email}</span>
+                  <span className={`shrink-0 ${statusColor(inv.status)}`}>{inv.status}</span>
+                  {inv.status === 'pending' && (
+                    <button
+                      type="button"
+                      onClick={() => void handleRevoke(inv.id)}
+                      disabled={busy}
+                      className="shrink-0 text-gray-600 hover:text-red-400 disabled:opacity-40"
+                    >
+                      Revoke
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface TournamentsViewProps {
   onNavigateToRegistration?: () => void;
@@ -210,6 +309,9 @@ export default function TournamentsView({ onNavigateToRegistration }: Tournament
                     )}
                   </div>
                 </div>
+                {row.tournament_status !== 'finalized' && (
+                  <InvitePanel tournamentId={row.tournament_id} tournamentName={row.tournament_name} />
+                )}
               </div>
             ))
           )}

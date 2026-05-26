@@ -189,6 +189,31 @@ export async function runMigrations(): Promise<void> {
       );
     `);
 
+    // Add firebase_uid to players
+    if (!(await hasMigration('add_firebase_uid_v1'))) {
+      await client.query(`
+        ALTER TABLE players ADD COLUMN IF NOT EXISTS firebase_uid TEXT UNIQUE
+      `);
+      await recordMigration('add_firebase_uid_v1');
+    }
+
+    // Invitations table
+    if (!(await hasMigration('create_invitations_v1'))) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS invitations (
+          id            SERIAL PRIMARY KEY,
+          tournament_id INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+          email         TEXT    NOT NULL,
+          token         TEXT    NOT NULL UNIQUE,
+          status        TEXT    NOT NULL DEFAULT 'pending',
+          created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          expires_at    TIMESTAMPTZ,
+          UNIQUE(tournament_id, email)
+        )
+      `);
+      await recordMigration('create_invitations_v1');
+    }
+
     // Seed tables
     if (!(await hasMigration('seed_tables_v1'))) {
       for (const name of ['Hearts', 'Spades', 'Clubs', 'Diamonds']) {

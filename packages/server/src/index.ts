@@ -18,6 +18,8 @@ import blindStructuresRouter from './routes/blindStructures';
 import seasonsRouter from './routes/seasons';
 import payoutsRouter from './routes/payouts';
 import dataRouter from './routes/data';
+import invitationsRouter from './routes/invitations';
+import playerSelfRouter from './routes/playerSelf';
 
 const PORT = parseInt(process.env.PORT ?? '3001');
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN ?? 'http://localhost:5173';
@@ -39,9 +41,12 @@ app.use(express.json());
 // Public routes — no auth required
 app.use('/api/health', healthRouter);
 
-// All POST / PUT / DELETE across every /api route requires a valid admin token
+// All POST / PUT / DELETE across /api requires admin EXCEPT:
+// - /api/player/* (player self-service, handled by requireAuth inside the router)
+// - /api/invitations (handles its own per-route auth)
 app.use('/api', (req, res, next) => {
   if (req.method === 'GET') return next();
+  if (req.path.startsWith('/player') || req.path.startsWith('/invitations')) return next();
   requireAdmin(req, res, next);
 });
 
@@ -54,6 +59,12 @@ app.use('/api/blind-structures', blindStructuresRouter);
 app.use('/api/seasons', seasonsRouter);
 app.use('/api/payouts', payoutsRouter);
 app.use('/api/data', dataRouter);
+
+// Invitation routes: GET /:token is public; POST/DELETE use their own requireAdmin internally
+app.use('/api/invitations', invitationsRouter);
+
+// Player self-service routes: all require Firebase auth (any user, not admin-only)
+app.use('/api/player', playerSelfRouter);
 
 app.use(errorHandler);
 

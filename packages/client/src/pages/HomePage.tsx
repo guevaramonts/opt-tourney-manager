@@ -79,7 +79,8 @@ export default function HomePage() {
           <span className="text-2xl font-black tracking-tight text-white">♠ OPT</span>
           <span className="text-sm text-gray-500 hidden sm:block">Olalde Poker Tournament</span>
         </div>
-        <nav className="flex gap-4 text-xs text-gray-500">
+        <nav className="flex gap-4 text-xs text-gray-500 items-center">
+          <a href="/player" className="hover:text-green-400 transition-colors">My Account</a>
           <a href="/clock" className="hover:text-orange-400 transition-colors">Clock</a>
           <a href="/admin" className="hover:text-orange-400 transition-colors">Admin</a>
         </nav>
