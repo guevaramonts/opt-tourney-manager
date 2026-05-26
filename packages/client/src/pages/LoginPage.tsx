@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../auth/firebase';
 
@@ -8,6 +8,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
   const navigate = useNavigate();
 
   async function handleSubmit(e: React.FormEvent) {
@@ -24,6 +26,20 @@ export default function LoginPage() {
     }
   }
 
+  async function handleReset() {
+    if (!email) { setError('Enter your email address above first'); return; }
+    setError('');
+    setResetLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setResetSent(true);
+    } catch {
+      setError('Could not send reset email — check the address and try again');
+    } finally {
+      setResetLoading(false);
+    }
+  }
+
   return (
     <div style={s.page}>
       <form onSubmit={handleSubmit} style={s.card}>
@@ -37,8 +53,17 @@ export default function LoginPage() {
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required style={s.input} />
         </div>
         {error && <div style={s.error}>{error}</div>}
+        {resetSent && <div style={s.success}>Reset email sent — check your inbox.</div>}
         <button type="submit" disabled={loading} style={{ ...s.btn, opacity: loading ? 0.7 : 1 }}>
           {loading ? 'Signing in…' : 'Sign in'}
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleReset()}
+          disabled={resetLoading}
+          style={s.resetBtn}
+        >
+          {resetLoading ? 'Sending…' : 'Forgot password?'}
         </button>
       </form>
     </div>
@@ -53,5 +78,7 @@ const s: Record<string, React.CSSProperties> = {
   label: { display: 'block', color: '#888', fontSize: 13, marginBottom: 6 },
   input: { width: '100%', background: '#1a1a1a', border: '1px solid #333', borderRadius: 6, padding: '10px 12px', color: '#fff', fontSize: 15, boxSizing: 'border-box' },
   error: { color: '#ff4444', fontSize: 14, marginBottom: 16 },
+  success: { color: '#4caf50', fontSize: 14, marginBottom: 16 },
   btn: { width: '100%', background: '#2a5cff', color: '#fff', border: 'none', borderRadius: 6, padding: 12, fontSize: 16, cursor: 'pointer', marginTop: 8 },
+  resetBtn: { width: '100%', background: 'transparent', color: '#666', border: 'none', borderRadius: 6, padding: '10px 0 0', fontSize: 13, cursor: 'pointer', textAlign: 'center' },
 };
